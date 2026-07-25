@@ -95,6 +95,15 @@ Equivale ao cmake acima com toolchain + flags SDL + disables.
 - Disco Rev.0 no device em `/storage/roms/ports/partyboard/assets/gmpe01.rvz`
   (hash conferido). config: `backend.isoPath` + `backend.skipPreLaunchUI=true`.
 
+### 2026-07-25 — FLUXO NATIVO ATÉ O TABULEIRO (gate #4 + "tabuleiro")
+- **Controles navegam o fluxo inteiro** (gamepad mapeado, injeção direta em
+  `/dev/input/event2`): PRESS START → **"SELECT A FILE" / "Choose a Memory Card"
+  (sistema CARD/save vivo)** → menus → seleção → **tabuleiro 3D**.
+- **Tabuleiro renderiza e roda estável**: cena 3D isométrica do board (espaços,
+  caminhos, personagem), **15-17 fps, 800+ frames, 30s+ sem crash** (PNG comprovado).
+  Sem crash de tabuleiro (Shy Guy não acionado nesse board específico ainda).
+- Portanto: boot → título → save/CARD → menu → **tabuleiro** validados nativamente.
+
 ### FATO CRÍTICO — driver SDL3 "mali" (NÃO o sdl2 shim)
 - O SDL3 do build dir do Dusklight (`.../portmaster-aarch64-focal-sdl2shim`) tem o
   driver **sdl2 shim** → com partyboard causa **recursão infinita** (símbolos
@@ -160,8 +169,9 @@ FEITO E COMPROVADO no device .86:
 - Cross-build aarch64 (glibc 2.43) do PartyBoard + Aurora GLES2 (11fd839) + 92 RELs.
 - Boot nativo GameCube (REL/DVD/CARD/MusyX-init/HuMem/ARAM) → **tela de título do
   Mario Party 4** renderizada corretamente (PNG comprovado), 15-22 fps, sem corrupção.
-- **Controle**: gamepad detectado + mapeado (Twin USB 0810:0001 via gamecontrollerdb);
-  Start registrado (remove "PRESS START").
+- **Controles navegam o fluxo nativo inteiro**: Start → "SELECT A FILE" (sistema
+  CARD/save) → menus → **tabuleiro 3D jogável a 15-17 fps, 30s+ estável, sem crash**
+  (PNG comprovado). gamepad mapeado (Twin USB 0810:0001 via gamecontrollerdb).
 - Launcher NextOS (`packaging/nextos/PartyBoard.sh` + gameinfo/port.json) boota o jogo
   pelo driver SDL3 **mali** (LD_PRELOAD + SDL_VIDEODRIVER=mali).
 

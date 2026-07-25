@@ -184,3 +184,37 @@ PENDENTE (impede DONE_PARTYBOARD):
 - Play-test completo título→save→board→minigame→retorno + correção dos defeitos Alpha.
 - `DONE_PARTYBOARD` **NÃO criado** (áudio + jogabilidade completos ausentes — o LOCK
   proíbe declarar pronto sem áudio/gameplay reais).
+
+## SPEC de implementação de áudio (próximo passo p/ destravar DONE)
+
+O backend PC do musyx (`extern/musyx`, MUSY_TARGET=MUSY_TARGET_PC) está incompleto em
+3 subsistemas; completá-los + um sink SDL produz áudio. Estruturas já mapeadas:
+
+1. **`salCtrlDsp(s16* dest)`** (`hw_pc.c:114`): hoje chama `salBuildCommandList` (vazio
+   no PC) + `salStartDsp` (vazio). Implementar o render por voz:
+   - Percorrer `dspStudio[st].voiceRoot` (cada `DSPvoice* dv`), só `state!=0`.
+   - Amostras: `dv->smp_info.addr` (`void*`, dado em MRAM no PC) + `dv->pb->addr.currentAddress`
+     (Hi/Lo). `compType` (`dv->smp_info.compType`): 0/1=PCM16, 5/6=ADPCM (NGC).
+   - **ADPCM NGC**: decoder padrão (4-bit, pred_scale + `adpcm.a[8][2]` (coefTab),
+     `yn1/yn2`, gain). CoefTab vem de `SNDADPCMinfo` (`stream.h`) ou `dv->pb->adpcm.a`.
+     Referência do algoritmo: `dolphin` (DSP cofactor) ou qualquer decoder NGC-ADPCM.
+   - **Resample**: `dv->pb->src.ratio` (Hi/Lo, ponto fixo) + `currentAddressFrac` +
+     `last_samples[4]` (interpolação 4-tap do DSP; linear é aproximação aceitável p/ POC).
+   - **Mix**: volumes `dv->pb->mix.vL/vR/vDeltaL/vR` (modulados por ADSR `dv->adsr` /
+     `dv->pb->ve.currentVolume`) → acumular em `dspStudio[dv->studio].main[salFrame]`
+     (s32* L/R). Depois `salHandleAuxProcessing` (já em software) processa reverb/chorus.
+   - Converter `main[]` (s32) → `dest` (s16 L/R intercalado).
+2. **`salAiGetDest()`** (`hw_pc.c:102`): retornar `salAIBufferBase +
+   ((salAIBufferIndex+2)%4)*DMA_BUFFER_LEN` (hoje retorna NULL).
+3. **`salStartAi()`** (`hw_pc.c:95`): abrir sink SDL audio —
+   `SDL_OpenAudioDeviceStream(DEFAULT_PLAYBACK, {SDL_AUDIO_S16LSB,2,32000}, cb, NULL)`
+   (ou F32 e converter). No callback, chamar `salCallback()` (que avança o index e
+   invoca `snd_handle_irq` → `salCtrlDsp(salAiGetDest())`) e empurrar o slot p/ o SDL.
+   Reusar o retry EBUSY do Dusklight (`src/dusk/audio/DuskAudioSystem.cpp`) p/ o PCM
+   Amlogic. Habilitar `SDL_INIT_AUDIO` no aurora init.
+4. Frame: `synthInfo.numSamples=0x20`; `DMA_BUFFER_LEN=0x280`=640B = 160 samples s16-stereo.
+   32kHz. `salFrame` alterna 0/1 (double-buffer do studio).
+
+Verificação: (a) compila, (b) não crasha o boot→título, (c) `/proc/<pid>/fd` abre
+`/dev/snd/pcm`, (d) buffer de áudio com amostras não-zero/estruturadas. Confirmação
+final **a ouvido** = NextOS (pré-requisito do DONE).

@@ -95,14 +95,17 @@ Equivale ao cmake acima com toolchain + flags SDL + disables.
 - Disco Rev.0 no device em `/storage/roms/ports/partyboard/assets/gmpe01.rvz`
   (hash conferido). config: `backend.isoPath` + `backend.skipPreLaunchUI=true`.
 
-### 2026-07-25 — FLUXO NATIVO ATÉ O TABULEIRO (gate #4 + "tabuleiro")
-- **Controles navegam o fluxo inteiro** (gamepad mapeado, injeção direta em
+### 2026-07-25 — FLUXO NATIVO: título → save/CARD → menus (controles)
+- **Controles navegam o fluxo** (gamepad mapeado, injeção direta em
   `/dev/input/event2`): PRESS START → **"SELECT A FILE" / "Choose a Memory Card"
-  (sistema CARD/save vivo)** → menus → seleção → **tabuleiro 3D**.
-- **Tabuleiro renderiza e roda estável**: cena 3D isométrica do board (espaços,
-  caminhos, personagem), **15-17 fps, 800+ frames, 30s+ sem crash** (PNG comprovado).
-  Sem crash de tabuleiro (Shy Guy não acionado nesse board específico ainda).
-- Portanto: boot → título → save/CARD → menu → **tabuleiro** validados nativamente.
+  (sistema CARD/save vivo, PNG comprovado)** → **mode-select / management menus**
+  (RELs `modeseldll.so`, `mentDll.so` carregados). Render estável 12-22 fps, sem crash.
+- **Tabuleiro NÃO confirmado**: a navegação cega (A repetido) fica presa nos menus
+  de mode-select/management; não chega ao board de jogo. Uma cena 3D de menu foi
+  confundida com board pela análise de imagem — **não é board de gameplay**.
+- Chegar ao board exige navegação **intencional** (selecionar Party Mode → board →
+  personagens → start), que o NextOS faz com o controle real + feedback visual.
+  Áudio (abaixo) também bloqueia o DONE antes disso.
 
 ### FATO CRÍTICO — driver SDL3 "mali" (NÃO o sdl2 shim)
 - O SDL3 do build dir do Dusklight (`.../portmaster-aarch64-focal-sdl2shim`) tem o
@@ -169,9 +172,10 @@ FEITO E COMPROVADO no device .86:
 - Cross-build aarch64 (glibc 2.43) do PartyBoard + Aurora GLES2 (11fd839) + 92 RELs.
 - Boot nativo GameCube (REL/DVD/CARD/MusyX-init/HuMem/ARAM) → **tela de título do
   Mario Party 4** renderizada corretamente (PNG comprovado), 15-22 fps, sem corrupção.
-- **Controles navegam o fluxo nativo inteiro**: Start → "SELECT A FILE" (sistema
-  CARD/save) → menus → **tabuleiro 3D jogável a 15-17 fps, 30s+ estável, sem crash**
-  (PNG comprovado). gamepad mapeado (Twin USB 0810:0001 via gamecontrollerdb).
+- **Controles navegam o fluxo nativo**: Start → "SELECT A FILE" (sistema
+  CARD/save) → menus mode-select/management, render estável 12-22 fps, sem crash.
+  gamepad mapeado (Twin USB 0810:0001 via gamecontrollerdb). (Chegar ao board de
+  jogo exige navegação intencional multi-passo — fluxo p/ o NextOS com controle real.)
 - Launcher NextOS (`packaging/nextos/PartyBoard.sh` + gameinfo/port.json) boota o jogo
   pelo driver SDL3 **mali** (LD_PRELOAD + SDL_VIDEODRIVER=mali).
 

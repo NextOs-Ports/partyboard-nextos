@@ -239,3 +239,29 @@ sink+synth estão prontos, mas o **lado do jogo não aciona o MusyX** neste flux
 (incompletude upstream do partyboard — rastrear por que `HuAudInit→sndInit`
 (msm/msmsys.c:884) não é alcançado no boot/título). Sem isso, não há áudio para
 renderizar; e a correção tonal do synth precisaria validação a ouvido de qualquer forma.
+
+## ÁUDIO — tentativa profunda, REVERTIDA para preservar o build funcional (2026-07-25)
+
+Avancei a cascata inteira do áudio (implementação + diagnóstico), mas **reverti ao
+estado funcional** (commits desta branch) porque habilitar o musyx quebra o boot e a
+solução é multi-camada + inverificável a ouvido. Achados (mapa p/ próxima tentativa):
+1. **Raiz game-side**: `src/port/audio.c::HuAudInit` tem `msmSysInit(...)` **comentado**
+   (linha ~53) — por isso `sndInit`/musyx nunca inicializa. Os fontes MSM (`src/msm/*.c`)
+   também **não estão no build** (precisa adicioná-los ao `files.cmake`), e há **stubs
+   msm duplicados** em `src/port/stubs.c` (remover ao ativar os reais).
+2. Ao descomentar `msmSysInit` + adicionar MSM + remover stubs + stubbar AI/AR (aurora
+   não implementa `AI*` e só tem ARInit/ARAlloc/ARQ*; o resto de `ar.h`/`ai.h` é
+   stub-needed), o build linka, mas `msmSysInit` **falha com erro -10**
+   (`MSM_ERR_OPENFAIL` — abrir `/sound/mpgcsnd.msm` do DVD). Precisa o open/read do
+   DVD resolver esse path (msmInit.open/read vieram NULL de HuAudInit).
+3. Mesmo resolvendo -10, há **endereçamento ARAM**: `smp_info.addr` da voz pode ser
+   endereço ARAM (não ponteiro MRAM direto) → o synth lê no lugar errado. E o synth
+   (ADPCM-NGC + resample + mix) precisaria de **validação a ouvido**.
+4. **O sink SDL3 (`src/port/pc_audio.cpp`) + o pump (`salPumpAudioFrame`) estavam
+   COMPROVADOS funcionando** no device (callback ~55/s, abre `/dev/snd/pcmC0D0p`,
+   sem crash) — só `killall pulseaudio` antes (ele segura o hardware). Essa parte
+   (output) está validada; o que falta é o lado game-side (itens 1-3) + ouvido.
+
+Conclusão: áudio é trabalho multi-camada (game-side init + ARAM + synth + ouvido),
+inacabável/inverificável autonomamente. Build mantido no estado funcional (áudio inerto,
+sem regressão). `DONE_PARTYBOARD` pendente em áudio + play-test.

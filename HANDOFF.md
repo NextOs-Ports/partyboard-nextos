@@ -218,3 +218,24 @@ O backend PC do musyx (`extern/musyx`, MUSY_TARGET=MUSY_TARGET_PC) está incompl
 Verificação: (a) compila, (b) não crasha o boot→título, (c) `/proc/<pid>/fd` abre
 `/dev/snd/pcm`, (d) buffer de áudio com amostras não-zero/estruturadas. Confirmação
 final **a ouvido** = NextOS (pré-requisito do DONE).
+
+## ÁUDIO — implementação parcial (WIP, 2026-07-25)
+
+Implementado (commits nesta branch), **inerte e sem regressão** (o boot→título segue
+estável, 30+fps, sem crash):
+- **Sink SDL3** (`src/port/pc_audio.cpp`): `SDL_OpenAudioDeviceStream` 32kHz s16
+  stereo + callback que chama `salPumpAudioFrame`. **Pipeline de SAÍDA comprovado**:
+  callback dispara a ~55/s, abre `/dev/snd/pcmC0D0p`. **Requer parar PulseAudio**
+  (ele segura o hardware; `killall pulseaudio` libera `plughw:0,0`).
+- **Sintetizador musyx** (`extern/musyx/.../hw_pc.c`): `salCtrlDsp` renderiza vozes
+  (ADPCM-NGC + PCM16, resample nearest, mix L/R, bounds-checked); `salAiGetDest`
+  retorna slot real; `salPumpAudioFrame` bomba um frame DMA. (`_DEBUG_PC_AUDIO` loga
+  peak/voices se reativado no CMakeLists do musyx.)
+
+**Bloqueio restante (raiz):** o **jogo não chama `sndInit`/`hwInit`/`salInitAi`** no
+fluxo do título (log confirmou `salInitAi` nunca invocado) → o MusyX nunca inicializa
+→ `salAIBufferBase` fica NULL → `salPumpAudioFrame` retorna silêncio. Ou seja, o
+sink+synth estão prontos, mas o **lado do jogo não aciona o MusyX** neste fluxo
+(incompletude upstream do partyboard — rastrear por que `HuAudInit→sndInit`
+(msm/msmsys.c:884) não é alcançado no boot/título). Sem isso, não há áudio para
+renderizar; e a correção tonal do synth precisaria validação a ouvido de qualquer forma.

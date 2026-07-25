@@ -119,3 +119,54 @@ Equivale ao cmake acima com toolchain + flags SDL + disables.
 
 - `/storage/roms/.update` já contém artefatos `crash1-*` de tentativa anterior
   (não destruídos; só observar). Reutilizar `/storage/roms/.update` para TAR grande.
+- Runtime no device: `/storage/roms/ports/partyboard/` (binário, 92 RELs/libdol,
+  libSDL3.so.0 **mali**, libpng16/libz, res/, gamecontrollerdb.txt, PartyBoard.sh).
+- Disco Rev.0 em `assets/gmpe01.rvz`. Launcher deployado em `ports_scripts/` e
+  `ports/partyboard/`. Runtime (config/saves/cache) sob `runtime/`.
+
+## ÁUDIO — root cause (BLOQUEIA DONE)
+
+O áudio MusyX **não está implementado no alvo PC** do port upstream. Prova:
+- `extern/musyx/.../hw_pc.c`: `salAiGetDest()` retorna **NULL**, `salStartAi()` retorna
+  **false**, `salStartDsp()` é **vazio**.
+- `extern/musyx/.../hw_dspctrl.c::salBuildCommandList(dest,...)` é **inteiramente**
+  `#if MUSY_TARGET == MUSY_TARGET_DOLPHIN` — no alvo PC (`MUSY_TARGET=MUSY_TARGET_PC`,
+  fixado em `extern/musyx/CMakeLists.txt`) o corpo **não existe** → nada é renderizado
+  em `dest`.
+- aurora declara a API AI em `include/dolphin/ai.h` mas **não a implementa**; não há
+  emulador de DSP de software no musyx.
+
+Logo: o jogo chama `hwInit`→`salInitAi` (vemos "MusyX ARAM handler initialized"),
+mas nenhuma amostra é sintetizada nem enviada ao ALSA. O Dusklight usa JAudio2 (TP),
+**não** MusyX — sua `DuskAudioSystem.cpp` não serve de molde.
+
+Para ter áudio é preciso: (a) um **emulador de DSP do GC** que interprete a
+command-list (salBuildCommandList) e renderize PCM 16-bit stereo @32kHz, OU
+(b) re-síntese do MusyX em software; e depois pontear `salAiGetDest`+`salStartAi`
+para um sink SDL audio (SDL_OpenAudioDeviceStream, 32kHz, F32 ou S16). Trabalho
+de weeks, não verificável a ouvido neste fluxo.
+
+## Defeitos Alpha upstream (LOCK — validar ANTES de DONE)
+
+Lista do Alpha: crash no tabuleiro Shy Guy; crash em Manta Rings, Slime Time,
+Makin' Waves, Bowser Bop; 999 moedas; dado quebrado; gráficos corrompidos;
+sombras azuis; softlock em double roll. Todos exigem **play-test interativo**
+navegando título→menu→board→minigame com controle; o NextOS valida no aparelho.
+A base para esse teste (boot→título→controle→render correto a 15-22fps) está pronta.
+
+## STATUS (honesto, per LOCK)
+
+FEITO E COMPROVADO no device .86:
+- Cross-build aarch64 (glibc 2.43) do PartyBoard + Aurora GLES2 (11fd839) + 92 RELs.
+- Boot nativo GameCube (REL/DVD/CARD/MusyX-init/HuMem/ARAM) → **tela de título do
+  Mario Party 4** renderizada corretamente (PNG comprovado), 15-22 fps, sem corrupção.
+- **Controle**: gamepad detectado + mapeado (Twin USB 0810:0001 via gamecontrollerdb);
+  Start registrado (remove "PRESS START").
+- Launcher NextOS (`packaging/nextos/PartyBoard.sh` + gameinfo/port.json) boota o jogo
+  pelo driver SDL3 **mali** (LD_PRELOAD + SDL_VIDEODRIVER=mali).
+
+PENDENTE (impede DONE_PARTYBOARD):
+- **Áudio** (root cause acima — precisa de emulador DSP MusyX).
+- Play-test completo título→save→board→minigame→retorno + correção dos defeitos Alpha.
+- `DONE_PARTYBOARD` **NÃO criado** (áudio + jogabilidade completos ausentes — o LOCK
+  proíbe declarar pronto sem áudio/gameplay reais).

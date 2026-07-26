@@ -98,6 +98,8 @@ set(PORT_FILES
         src/port/iso_validate.cpp
         src/port/OS.c
         src/port/portmain.cpp
+        src/port/pc_audio.cpp
+        src/port/pc_audio.hpp
         src/port/settings.cpp
         src/port/stubs.c
         src/port/version.cpp

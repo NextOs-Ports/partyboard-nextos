@@ -822,6 +822,15 @@ s32 msmSysInit(MSM_INIT *init, MSM_ARAM *aram)
         msmFioClose(&sp10);
         return MSM_ERR_READFAIL;
     }
+    /* byte-swap MSM_INFO multi-byte fields (GameCube big-endian -> host LE). */
+    sys.info->musMax = __builtin_bswap16(sys.info->musMax);
+    sys.info->seMax = __builtin_bswap16(sys.info->seMax);
+    sys.info->minMem = __builtin_bswap32(sys.info->minMem);
+    sys.info->aramSize = __builtin_bswap32(sys.info->aramSize);
+    sys.info->grpBufSizeA = __builtin_bswap32(sys.info->grpBufSizeA);
+    sys.info->grpBufSizeB = __builtin_bswap32(sys.info->grpBufSizeB);
+    sys.info->dummyMusSize = __builtin_bswap32(sys.info->dummyMusSize);
+    sys.info->unk24 = __builtin_bswap32(sys.info->unk24);
     if (aram != NULL) {
         if (aram->skipARInit == 0) {
             ARInit(aram->stackIndex, aram->aramEnd);

@@ -804,6 +804,12 @@ s32 msmSysInit(MSM_INIT *init, MSM_ARAM *aram)
         msmFioClose(&sp10);
         return MSM_ERR_READFAIL;
     }
+    /* MSM data is GameCube big-endian; byte-swap the all-u32 header on LE hosts. */
+    {
+        u32* p = (u32*)sys.header;
+        u32 n = 0x60 / 4;
+        while (n--) { p[n] = __builtin_bswap32(p[n]); }
+    }
     if (sys.header->version != MSM_FILE_VERSION) {
         msmFioClose(&sp10);
         return MSM_ERR_INVALIDFILE;

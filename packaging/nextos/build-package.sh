@@ -38,13 +38,8 @@ mkdir -p "$PORT/assets" "$PORT/runtime/home" "$PORT/runtime/config" "$PORT/runti
 
 # Binary + RELs + shared libs (RUNPATH=$ORIGIN finds them beside the binary).
 cp "$BUILD/partyboard" "$PORT/partyboard"
-cp "$BUILD/libdol.so" "$PORT/libdol.so"
-cp "$BUILD"/m*.so "$PORT/" 2>/dev/null || true
-cp "$BUILD"/w*Dll.so "$PORT/" 2>/dev/null || true
-cp "$BUILD"/bootDll.so "$BUILD"/instDll.so "$BUILD"/E3setupDLL.so "$BUILD"/present.so "$BUILD"/option.so \
-     "$BUILD"/modeseldll.so "$BUILD"/mgmodedll.so "$BUILD"/selmenuDll.so "$BUILD"/staffDll.so \
-     "$BUILD"/subchrselDll.so "$BUILD"/resultDll.so "$BUILD"/modeltestDll.so "$BUILD"/mentDll.so \
-     "$BUILD"/messDll.so "$BUILD"/mpexDll.so "$BUILD"/mstory*.so "$PORT/" 2>/dev/null || true
+# All GameCube REL modules + the shared DOL (every *.so the build produced).
+for so in "$BUILD"/*.so; do cp "$so" "$PORT/"; done
 
 # SDL3 (mali-fbdev driver) + bundled deps.
 cp "$SDL3" "$PORT/libSDL3.so.0"

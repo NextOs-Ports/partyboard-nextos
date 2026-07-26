@@ -264,7 +264,7 @@ s32 HuAudSeqPlay(s16 musId) {
     if (musicOffF != 0 || omSysExitReq != 0) {
         return 0;
     }
-    // channel = msmMusPlay(musId, NULL);
+    channel = msmMusPlay(musId, NULL);
     return channel;
 }
 

@@ -121,8 +121,13 @@ static s32 msmSysLoadBaseGroup(void *buf)
             msmFioClose(&file);
             return MSM_ERR_READFAIL;
         }
-        if (!sndPushGroup((void*) (grpData->projOfs + (u32) grpData), grpInfo->gid, buf,
-            (void*) (grpData->sdirOfs + (u32) grpData), (void*) (grpData->poolOfs + (u32) grpData)))
+        /* byte-swap MSM_GRP_HEAD offsets (big-endian) + fix 64-bit pointer arithmetic. */
+        grpData->poolOfs = __builtin_bswap32(grpData->poolOfs);
+        grpData->projOfs = __builtin_bswap32(grpData->projOfs);
+        grpData->sdirOfs = __builtin_bswap32(grpData->sdirOfs);
+        grpData->sngOfs = __builtin_bswap32(grpData->sngOfs);
+        if (!sndPushGroup((void*) ((uintptr_t)grpData->projOfs + (uintptr_t) grpData), grpInfo->gid, buf,
+            (void*) ((uintptr_t)grpData->sdirOfs + (uintptr_t) grpData), (void*) ((uintptr_t)grpData->poolOfs + (uintptr_t) grpData)))
         {
             msmFioClose(&file);
             return MSM_ERR_GRP_FAILPUSH;

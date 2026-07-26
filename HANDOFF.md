@@ -319,3 +319,30 @@ field-level. Faltam swapar: `MSM_STREAM_HEADER`, `MSM_GRP_INFO`/`MSM_GRP_HEAD` (
 grpInfo/grpData), e os dados MusyX (proj/sdir/pool pushed via `sndPushGroup`). É mecânico
 mas extenso (cada struct), e termina em **verificação a ouvido**. O alocador 64-bit
 (`uintptr_t`) é um fix REAL que entrega valor independente do resto.
+
+## ÁUDIO — PIPELINE COMPLETO E CONECTADO (2026-07-25, HEAD dc231541)
+
+**MARCO HISTÓRICO**: pela primeira vez, o sistema de áudio completo do PartyBoard
+funciona no device .86 (Mali-450/GLES2):
+- `msmSysInit` **SUCCEDE** (sem erro) — endianness portado por 6 layers + alocador
+  64-bit corrigido.
+- `/dev/snd/pcmC0D0p` **ABERTO e consumindo** áudio — sink SDL3→ALSA conectado.
+- Jogo boota ao título e roda **sem crash** (vivo SIM, GL up, frames renderizando).
+- Sintetizador MusyX em software (`hw_pc.c`: `salCtrlDsp` renderiza vozes com
+  decoder ADPCM-NGC + resample + mix L/R) alimentando o sink SDL.
+
+O pipeline inteiro flui: **dados do disco (BE swapados) → musyx/msm init → synth
+render → SDL audio → ALSA → speaker**. A **qualidade** do áudio (música reconhecível
+vs ruído) precisa de **verificação a ouvido** (NextOS) — o synth é aproximado
+(nearest-sample resample, ADPCM simplificado).
+
+Fixes commitados nesta sessão (HEAD dc231541):
+1. `msmMemAlloc/Init/Free` — aritmética `(u32)` → `uintptr_t` (bug real 64-bit).
+2. `HuAudInit` — `msmInit.heap` via `malloc(21MB)` (bypass HEAP_MUSIC pequeno).
+3. `MSM_HEADER` byte-swap (version=2 ✓).
+4. `MSM_INFO` field-swap (grpBuf sizes ✓).
+5. `MSM_STREAM_HEADER` field-swap.
+6. `MSM_GRP_INFO[]` array field-swap.
+7. `MSM_AUXPARAM` union field-swap.
+8. Musyx synth (`hw_pc.c` salCtrlDsp/salPumpAudioFrame/salAiGetDest/salStartAi).
+9. SDL3 sink (`src/port/pc_audio.cpp`).

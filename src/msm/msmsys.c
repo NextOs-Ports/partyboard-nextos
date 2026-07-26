@@ -189,6 +189,18 @@ s32 msmSysGroupInit(DVDFileInfo *file)
     if (msmFioRead(file, sys.grpInfo, sys.header->grpInfoSize, sys.header->grpInfoOfs) < 0) {
         return MSM_ERR_READFAIL;
     }
+    /* byte-swap MSM_GRP_INFO array (big-endian -> host LE). */
+    {
+        s32 gi;
+        for (gi = 0; gi < sys.grpMax; gi++) {
+            MSM_GRP_INFO* g = &sys.grpInfo[gi];
+            g->gid = __builtin_bswap16(g->gid);
+            g->dataOfs = __builtin_bswap32(g->dataOfs);
+            g->dataSize = __builtin_bswap32(g->dataSize);
+            g->sampOfs = __builtin_bswap32(g->sampOfs);
+            g->sampSize = __builtin_bswap32(g->sampSize);
+        }
+    }
     if ((sys.grpBufA = msmMemAlloc(sys.info->grpBufSizeA * sys.grpStackAMax)) == NULL) {
         return MSM_ERR_OUTOFMEM;
     }

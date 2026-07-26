@@ -304,3 +304,18 @@ Avanço concreto (commits add0ef0b, 5d47ce07; build ESTÁVEL — falha graciosa,
    `(u32) sys.grpBufA/B` (212, 218) — mesmo bug de truncamento; trocar por `uintptr_t`.
 3. Depois: endereçamento ARAM + synth (hw_pc.c) + sink SDL (pc_audio.cpp, já provado) +
    **verificação a ouvido** (NextOS).
+
+## ÁUDIO — endianness pervasivo CONFIRMADO (2026-07-25, build estável)
+
+Avançou por 3 layers de endianness (commits até c285c9ca):
+1. `MSM_HEADER` byte-swap → `version=2` ✓ (passa o check).
+2. `MSM_INFO` field-swap (musMax/seMax/minMem/aramSize/grpBufSizeA/B/...) → grpBuf sizes ok.
+3. Próximo OOM vem de `msmStreamInit` (caller confirmado via `__builtin_return_address`):
+   lê `MSM_STREAM_HEADER` BE raw → `maxBufs`/`chanMax` garbage → alloc 3.5GB → OOM.
+
+**Conclusão definitiva**: o pipeline de dados MSM/MusyX inteiro é **big-endian** (GameCube).
+O código (`src/msm/*.c`, decomp GC) lê raw; no aarch64 LE cada struct precisa byte-swap
+field-level. Faltam swapar: `MSM_STREAM_HEADER`, `MSM_GRP_INFO`/`MSM_GRP_HEAD` (array
+grpInfo/grpData), e os dados MusyX (proj/sdir/pool pushed via `sndPushGroup`). É mecânico
+mas extenso (cada struct), e termina em **verificação a ouvido**. O alocador 64-bit
+(`uintptr_t`) é um fix REAL que entrega valor independente do resto.

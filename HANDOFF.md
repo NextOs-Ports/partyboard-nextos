@@ -265,3 +265,22 @@ solução é multi-camada + inverificável a ouvido. Achados (mapa p/ próxima t
 Conclusão: áudio é trabalho multi-camada (game-side init + ARAM + synth + ouvido),
 inacabável/inverificável autonomamente. Build mantido no estado funcional (áudio inerto,
 sem regressão). `DONE_PARTYBOARD` pendente em áudio + play-test.
+
+## ÁUDIO — progresso adicional (2026-07-25, depois revertido p/ build funcional)
+
+Avanços concretos além do diagnóstico anterior (revertidos porque a cascata crasha e
+precisa de ouvido; mantido o build estável):
+- **O arquivo de som EXISTE no disco**: dump do FST (aurora `lib/dolphin/dvd/fst.cpp`,
+  `fstCallback`) listou `sound/mpgcsnd.msm` + `sound/mpgcstr.pdt` (357 arquivos). Então
+  o `-10` **não** é arquivo faltando.
+- **`-10` = `MSM_ERR_OUTOFMEM`** (não OPENFAIL). Raiz: `HeapSizeTbl[HEAP_MUSIC]` no
+  `src/game/malloc.c` é `0x140000`, ×4 no PC = **5MB**, mas `HuAudInit` pede
+  `HuMemDirectMalloc(HEAP_MUSIC, 0x13FC00)` = **21MB** → retorna NULL → heap msm inválido.
+- Fix testado: `malloc.c` `HEAP_MUSIC=0x1800000` (24MB) no PC + `portmain mem1Size=128MB`
+  (+ `CMAKE_POSITION_INDEPENDENT_CODE ON` p/ musyx no dol shared, + MSM no `files.cmake`,
+  + `-Wno` p/ o C decompilado do MSM, + stubs AI/AR em `stubs.c`). Resultado: passou do
+  `-10` e heaps inicializam, mas **crasha em `msmMemAlloc`** (heap msm ainda inválido —
+  provável interação OSAlloc/HuMem). Próximo passo seria depurar esse heap; depois
+  endereçamento ARAM + synth + ouvido.
+- Build final: **revertido ao estado funcional** (HEAD `26bc555c`); áudio inerto, sem
+  regressão. Toda a cascata acima está mapeada para a próxima tentativa (com ouvido).

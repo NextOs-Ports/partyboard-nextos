@@ -893,6 +893,14 @@ s32 msmSysInit(MSM_INIT *init, MSM_ARAM *aram)
                 result = MSM_ERR_READFAIL;
             }
             else {
+                /* byte-swap MSM_AUXPARAM union fields (big-endian -> host LE).
+                 * Each struct: s8 type + pad[3] (4B, no swap) + union of u32/f32 (9 words). */
+                u8* abase = (u8*)sys.auxParam;
+                u32 acount = sys.header->auxParamSize / 40;
+                for (u32 ai = 0; ai < acount; ai++) {
+                    u32* uw = (u32*)(abase + ai * 40 + 4);
+                    for (int aj = 0; aj < 9; aj++) uw[aj] = __builtin_bswap32(uw[aj]);
+                }
                 result = 0;
             }
         }

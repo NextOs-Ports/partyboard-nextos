@@ -346,3 +346,15 @@ Fixes commitados nesta sessão (HEAD dc231541):
 7. `MSM_AUXPARAM` union field-swap.
 8. Musyx synth (`hw_pc.c` salCtrlDsp/salPumpAudioFrame/salAiGetDest/salStartAi).
 9. SDL3 sink (`src/port/pc_audio.cpp`).
+
+## ÁUDIO — raiz FINAL: musyx LIB lê dados BE como LE (2026-07-25)
+
+Pipeline completo e conectado (msmSysInit sucesso, ALSA open, synth + sink fluindo).
+Mas **voices=0** (estúdio ativo, sem vozes): o jogo chama `msmMusPlay` mas o musyx
+LIB (decompilado do GC, assume big-endian) lê os dados de som (proj/sdir/pool:
+sequências, tabelas de amostras) como little-endian no aarch64 → sequências não
+parseiam → nenhuma voz é criada → silêncio.
+
+**Fix necessário**: byte-swap do payload musyx ANTES de `sndPushGroup`, OU corrigir
+cada leitura de struct dentro do `extern/musyx` (pervasivo). É o último layer de
+endianness, e o mais profundo (afeta a engine de áudio inteira, não só os metadados).

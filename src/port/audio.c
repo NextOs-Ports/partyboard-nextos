@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "game/audio.h"
 #include "game/memory.h"
 #include "game/msm.h"
@@ -41,8 +42,9 @@ void HuAudInit(void)
     s32 result;
     s16 i;
 
-    msmInit.heap = HuMemDirectMalloc(HEAP_MUSIC, 0x13FC00);
+    msmInit.heap = malloc(0x13FC00);
     msmInit.heapSize = 0x13FC00;
+    OSReport("[audio] msmInit.heap=%p (malloc 21MB)\n", msmInit.heap);
     msmInit.msmPath = "/sound/mpgcsnd.msm";
     msmInit.pdtPath = "/sound/mpgcstr.pdt";
     msmInit.open = NULL;
@@ -50,16 +52,14 @@ void HuAudInit(void)
     msmInit.close = NULL;
     msmAram.skipARInit = TRUE;
     msmAram.aramEnd = 0x808000;
-    // result = msmSysInit(&msmInit, &msmAram);
+    result = msmSysInit(&msmInit, &msmAram);
 
-    // if (result < 0) {
-    //     OSReport("MSM(Sound Manager) Error:Error Code %d\n", result);
-    //     while (1);
-    // }
-    if (OSGetSoundMode() == OS_SOUND_MODE_MONO) {
-        // msmSysSetOutputMode(SND_OUTPUTMODE_MONO);
+    if (result < 0) {
+        OSReport("MSM(Sound Manager) Error:Error Code %d (continuing without sound)\n", result);
+    } else if (OSGetSoundMode() == OS_SOUND_MODE_MONO) {
+        msmSysSetOutputMode(SND_OUTPUTMODE_MONO);
     } else {
-        // msmSysSetOutputMode(SND_OUTPUTMODE_SURROUND);
+        msmSysSetOutputMode(SND_OUTPUTMODE_SURROUND);
     }
     for (i = 0; i < 64; i++) {
         sndFXBuf[i][0] = -1;

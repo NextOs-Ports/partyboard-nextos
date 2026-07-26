@@ -75,6 +75,13 @@ set(GAME_FILES
 
         src/libhu/setvf.c
         src/libhu/subvf.c
+
+        src/msm/msmfio.c
+        src/msm/msmmem.c
+        src/msm/msmmus.c
+        src/msm/msmse.c
+        src/msm/msmstream.c
+        src/msm/msmsys.c
 )
 
 set(PORT_FILES

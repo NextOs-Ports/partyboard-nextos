@@ -403,7 +403,7 @@ extern "C" int port_main(int argc, char* argv[]) {
         config.windowHeight = HU_FB_HEIGHT * 2;
         config.desiredBackend = ResolveDesiredBackend();
         config.logCallback = &aurora_log_callback;
-        config.mem1Size = 64 * 1024 * 1024;
+        config.mem1Size = 128 * 1024 * 1024;
         config.mem2Size = 24 * 1024 * 1024;
         config.allowJoystickBackgroundEvents = partyboard::getSettings().game.allowBackgroundInput;
         config.pauseOnFocusLost = partyboard::getSettings().game.pauseOnFocusLost;

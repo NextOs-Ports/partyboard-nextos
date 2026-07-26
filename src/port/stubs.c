@@ -424,64 +424,37 @@ void GXResetWriteGatherPipe(void)
 // Hudson
 void HuDvdErrDispInit(GXRenderModeObj *rmode, void *xfb1, void *xfb2) { }
 
-void msmSysRegularProc(void)
-{
-}
-
-void msmMusFdoutEnd(void)
-{
-}
-
-int msmMusPlay(int musId, MSM_MUSPARAM *musParam)
-{
-    // TODO
-    return 0;
-}
-
-s32 msmMusGetStatus(int musNo)
-{
-    // TODO
-    return 0;
-}
-
-s32 msmStreamGetStatus(int streamNo)
-{
-    // TODO
-    return 0;
-}
-
-s32 msmSeSetParam(int seNo, MSM_SEPARAM* param)
-{
-    return 0;
-}
-
-s32 msmMusSetParam(s32 arg0, MSM_MUSPARAM* arg1)
-{
-    return 0;
-}
-
-void msmMusSetMasterVolume(s32 vol)
-{
-}
-
-s32 msmSysGetOutputMode(void)
-{
-    return 0;
-}
-
-s32 msmSeSetListener(Vec* pos, Vec* heading, float sndDist, float sndSpeed, MSM_SELISTENER* listener)
-{
-    return 0;
-}
-
-void msmSeStopAll(BOOL checkGrp, s32 speed)
-{
-}
-
-BOOL msmSysSetOutputMode(SND_OUTPUTMODE mode)
-{
-    return TRUE;
-}
+// msm functions provided by src/msm/*.c. GC AI (unused on PC) + AR helpers aurora
+// doesn't implement are stubbed here.
+AIDCallback AIRegisterDMACallback(AIDCallback callback) { return NULL; }
+void AIInitDMA(u32 a, u32 b) { (void)a; (void)b; }
+void AIStartDMA(void) {}
+void AIStopDMA(void) {}
+void AIInit(u8* s) { (void)s; }
+BOOL AIGetDMAEnableFlag(void) { return FALSE; }
+u32 AIGetDMABytesLeft(void) { return 0; }
+u32 AIGetDMAStartAddr(void) { return 0; }
+u32 AIGetDMALength(void) { return 0; }
+BOOL AICheckInit(void) { return TRUE; }
+AISCallback AIRegisterStreamCallback(AISCallback c) { (void)c; return NULL; }
+u32 AIGetStreamSampleCount(void) { return 0; }
+void AIResetStreamSampleCount(void) {}
+void AISetStreamPlayState(u32 s) { (void)s; }
+void AISetStreamVolLeft(u8 v) { (void)v; }
+void AISetStreamVolRight(u8 v) { (void)v; }
+u32 ARGetBaseAddress(void) { return 0; }
+u32 ARGetInternalSize(void) { return ARGetSize(); }
+u32 ARGetDMAStatus(void) { return 0; }
+void ARStartDMA(u32 t, u32 m, u32 a, u32 l) { (void)t; (void)m; (void)a; (void)l; }
+void ARReset(void) {}
+void ARSetSize(void) {}
+void ARClear(u32 f) { (void)f; }
+void ARQReset(void) {}
+void ARQRemoveRequest(ARQRequest* r) { (void)r; }
+void ARQRemoveOwnerRequest(u32 o) { (void)o; }
+void ARQFlushQueue(void) {}
+void ARQSetChunkSize(u32 s) { (void)s; }
+u32 ARQGetChunkSize(void) { return 0x2000; }
 
 void OSSetSoundMode(u32 mode)
 {

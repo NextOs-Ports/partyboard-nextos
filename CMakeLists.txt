@@ -67,6 +67,7 @@ endif()
 message(STATUS "Party Board version set to ${PARTY_BOARD_WC_DESCRIBE}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 project(partyboard LANGUAGES C CXX VERSION ${PARTY_BOARD_VERSION_STRING})
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if (APPLE)
     enable_language(OBJC)
 endif ()
@@ -146,6 +147,9 @@ set_target_properties(dol PROPERTIES C_VISIBILITY_PRESET default CXX_VISIBILITY_
 target_compile_definitions(dol PRIVATE TARGET_PC NON_MATCHING OPTIMIZED_TEXTURE_LOADING BYTESWAPPING TARGET_DOL VERSION=${VERSION} MUSY_VERSION_MAJOR=1 MUSY_VERSION_MINOR=5 MUSY_VERSION_PATCH=4)
 target_include_directories(dol PRIVATE include extern extern/aurora/include extern/aurora/include/dolphin ${CMAKE_BINARY_DIR})
 target_link_libraries(dol PUBLIC aurora::core aurora::card aurora::dvd aurora::gx aurora::mtx aurora::os aurora::si aurora::vi aurora::pad musyx absl::flat_hash_map nlohmann_json::nlohmann_json fmt::fmt rmlui_debugger)
+file(GLOB MSM_C_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/msm/*.c")
+set_source_files_properties(${MSM_C_FILES} PROPERTIES COMPILE_OPTIONS
+    "-Wno-implicit-function-declaration;-Wno-incompatible-pointer-types;-Wno-int-conversion;-Wno-pointer-sign;-Wno-discarded-qualifiers")
 # TODO it doesn't work on Linux yet
 if (WIN32)
     if(USE_ASAN)

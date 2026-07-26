@@ -284,3 +284,23 @@ precisa de ouvido; mantido o build estável):
   endereçamento ARAM + synth + ouvido.
 - Build final: **revertido ao estado funcional** (HEAD `26bc555c`); áudio inerto, sem
   regressão. Toda a cascata acima está mapeada para a próxima tentativa (com ouvido).
+
+## ÁUDIO — fix REAL do alocador + próximos layers (2026-07-25, build estável)
+
+Avanço concreto (commits add0ef0b, 5d47ce07; build ESTÁVEL — falha graciosa, sem crash):
+- **FIX REAL**: `src/msm/msmmem.c` (msmMemAlloc/Init/Free) usava aritmética de ponteiro
+  com `(u32)`/`(s32)` — **trunca ponteiros 64-bit no aarch64** → `msmMemAlloc` retornava
+  NULL → -10 OUTOFMEM. Corrigido para `uintptr_t`. Esse bug valeria para QUALquer host
+  64-bit; agora o alocador msm funciona.
+- `HuAudInit` aloca `msmInit.heap` via `malloc(21MB)` (bypass do HEAP_MUSIC pequeno).
+- Stubs AI/AR em `stubs.c`, MSM no build, `POSITION_INDEPENDENT_CODE ON`, mem1=128MB.
+
+**Próximos layers do áudio (mapeados, não-feitos):**
+1. **Endianness**: os dados do som (`mpgcsnd.msm`) são **big-endian** (GameCube); o código
+   MSM (`src/msm/*.c`, decomp GC) lê **raw** no aarch64 LE → campos errados (header
+   version lido `0x02000000` em vez de `2`). O jogo faz `BYTESWAPPING` em `data.c`/`decode.c`
+   mas o **MSM bypassa**. Precisa de byte-swap field-level em toda a leitura MSM.
+2. **Mais aritmética 32-bit** em `src/msm/msmsys.c`: `(u32) grpData` (linhas ~124-125),
+   `(u32) sys.grpBufA/B` (212, 218) — mesmo bug de truncamento; trocar por `uintptr_t`.
+3. Depois: endereçamento ARAM + synth (hw_pc.c) + sink SDL (pc_audio.cpp, já provado) +
+   **verificação a ouvido** (NextOS).

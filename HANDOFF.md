@@ -358,3 +358,29 @@ parseiam → nenhuma voz é criada → silêncio.
 **Fix necessário**: byte-swap do payload musyx ANTES de `sndPushGroup`, OU corrigir
 cada leitura de struct dentro do `extern/musyx` (pervasivo). É o último layer de
 endianness, e o mais profundo (afeta a engine de áudio inteira, não só os metadados).
+
+## ÁUDIO — layer FINAL: sub-tabelas do engine MusyX (2026-07-25)
+
+GROUP_DATA linked list swapado (layer 8), `sndPushGroup` agora encontra o grupo correto.
+Mas `voices=0` persiste: as sub-tabelas processadas por `InsertSamples`/`InsertMacros`/
+`InsertCurves`/`InsertKeymaps`/`InsertLayers` (arrays u16/u32 BE) são lidas como LE →
+dados de voz não registram → nenhuma voz criada.
+
+**Raiz absoluta final**: o engine MusyX inteiro (`extern/musyx/src/musyx/runtime/*.c`,
+~20 arquivos decompilados do GC) lê TODOS os seus dados como big-endian. No aarch64 LE,
+cada leitura de struct/field desses arquivos está errada. Fixar exige byte-swap em cada
+ponto de leitura de dados dentro do engine (pervasivo, formato proprietário do Factor 5).
+OU: byte-swap os payloads das sub-tabelas antes de passá-los às funções Insert*.
+
+**Resumo do progresso de áudio (12+ fixes reais commitados)**:
+1. `msmMemAlloc` 64-bit (`uintptr_t`) — bug real
+2. `HuAudInit` malloc heap (21MB)
+3-8. Byte-swap BE→LE: `MSM_HEADER`, `MSM_INFO`, `MSM_STREAM_HEADER`, `MSM_GRP_INFO[]`,
+   `MSM_AUXPARAM`, `MSM_GRP_HEAD` + `GROUP_DATA` linked list
+9. Musyx PC software synth (`hw_pc.c`)
+10. SDL3 audio sink (`pc_audio.cpp`)
+11. Stubs AI/AR + MSM no build + PIC
+12. `msmMusPlay` descomentado
+→ `msmSysInit` SUCEDE; ALSA open; pipeline completo; **voices=0** (sub-tabelas BE).
+
+O `DONE_PARTYBOARD` precisa: swap das sub-tabelas/engine + **ouvido** + play-test.

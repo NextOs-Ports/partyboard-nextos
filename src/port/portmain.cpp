@@ -9,6 +9,7 @@
 #include "ui/overlay.hpp"
 #include "ui/prelaunch.hpp"
 #include "ui/preset.hpp"
+#include "pc_audio.hpp"
 
 #include <SDL3/SDL_filesystem.h>
 #include <aurora/aurora.h>
@@ -426,6 +427,7 @@ extern "C" int port_main(int argc, char* argv[]) {
         AuroraSetViewportPolicy(AURORA_VIEWPORT_STRETCH);
     }
     VISetFrameBufferScale(partyboard::getSettings().game.internalResolutionScale.getValue());
+    if (auroraInfo.backend != BACKEND_NULL) { if (!partyboard::pc_audio::initialize()) PartyBoardMainLog.warn("PC audio sink init failed"); }
 
     // TODO PC
     // partyboard::audio::SetMasterVolume(partyboard::getSettings().audio.masterVolume / 100.0f);

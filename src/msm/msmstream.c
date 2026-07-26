@@ -324,6 +324,16 @@ s32 msmStreamInit(char *pdtPath) {
         msmFioClose(&file);
         return MSM_ERR_READFAIL;
     }
+    /* MSM_STREAM_HEADER is GameCube big-endian; swap on LE host. */
+    StreamInfo.header.version = __builtin_bswap16(StreamInfo.header.version);
+    StreamInfo.header.streamMax = __builtin_bswap16(StreamInfo.header.streamMax);
+    StreamInfo.header.chanMax = __builtin_bswap32(StreamInfo.header.chanMax);
+    StreamInfo.header.sampleFrq = __builtin_bswap32(StreamInfo.header.sampleFrq);
+    StreamInfo.header.maxBufs = __builtin_bswap32(StreamInfo.header.maxBufs);
+    StreamInfo.header.streamPackListOfs = __builtin_bswap32(StreamInfo.header.streamPackListOfs);
+    StreamInfo.header.adpcmParamOfs = __builtin_bswap32(StreamInfo.header.adpcmParamOfs);
+    StreamInfo.header.streamPackOfs = __builtin_bswap32(StreamInfo.header.streamPackOfs);
+    StreamInfo.header.sampleOfs = __builtin_bswap32(StreamInfo.header.sampleOfs);
     if (StreamInfo.header.version != MSM_PDT_FILE_VERSION) {
         msmFioClose(&file);
         return MSM_ERR_INVALIDFILE;

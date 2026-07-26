@@ -4,6 +4,7 @@
 #include "msm/msmmus.h"
 #include "msm/msmse.h"
 #include "msm/msmstream.h"
+#include "musyx/synthdata.h"
 
 static MSM_SYS sys;
 
@@ -126,6 +127,19 @@ static s32 msmSysLoadBaseGroup(void *buf)
         grpData->projOfs = __builtin_bswap32(grpData->projOfs);
         grpData->sdirOfs = __builtin_bswap32(grpData->sdirOfs);
         grpData->sngOfs = __builtin_bswap32(grpData->sngOfs);
+        /* byte-swap GROUP_DATA linked list (big-endian -> LE) before sndPushGroup.
+         * GROUP_DATA is 0x28 bytes, all u32/u16 — 10 u32 words, blanket-swap works. */
+        {
+            u8* prj = (u8*)((uintptr_t)grpData->projOfs + (uintptr_t)grpData);
+            GROUP_DATA* g = (GROUP_DATA*)prj;
+            int guard = 0;
+            while (guard++ < 256) {
+                u32* wp = (u32*)g;
+                for (int wi = 0; wi < 10; wi++) wp[wi] = __builtin_bswap32(wp[wi]);
+                if (g->nextOff == 0xFFFFFFFF) break;
+                g = (GROUP_DATA*)(prj + g->nextOff);
+            }
+        }
         if (!sndPushGroup((void*) ((uintptr_t)grpData->projOfs + (uintptr_t) grpData), grpInfo->gid, buf,
             (void*) ((uintptr_t)grpData->sdirOfs + (uintptr_t) grpData), (void*) ((uintptr_t)grpData->poolOfs + (uintptr_t) grpData)))
         {

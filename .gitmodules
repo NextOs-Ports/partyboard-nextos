@@ -1,9 +1,11 @@
 [submodule "extern/musyx"]
 	path = extern/musyx
-	url = https://github.com/AxioDL/musyx
+	url = https://github.com/NextOs-Ports/musyx-nextos.git
+	branch = nextos-partyboard
 [submodule "extern/aurora"]
 	path = extern/aurora
-	url = https://github.com/encounter/aurora.git
+	url = https://github.com/NextOs-Ports/aurora-mali450-es2.git
+	branch = nextos-mali450-gles2
 [submodule "extern/libco"]
 	path = extern/libco
 	url = https://github.com/higan-emu/libco.git

@@ -11,11 +11,19 @@ NEXTOS_TOOLCHAIN_ROOT="${NEXTOS_TOOLCHAIN_ROOT:-$(
     -print | sort -V | tail -1
 )}"
 export NEXTOS_TOOLCHAIN_ROOT
-SDL_SRC=<dusklight>/build/portmaster-aarch64-focal-sdl2shim/_deps/sdl-src
+# SDL3 source tree used for the vendored build. Point this at your local
+# Mali-fbdev SDL3 checkout (see README, "Building").
+SDL_SRC="${PARTYBOARD_SDL_SRC:-$ROOT/../SDL3-mali-current}"
 GLESV2="$ROOT/build/sysroot/lib/libGLESv2.so"
 
 [ -x "$NEXTOS_TOOLCHAIN_ROOT/bin/aarch64-libreelec-linux-gnu-gcc" ] || {
   echo "Current NextOS AArch64 toolchain not found: $NEXTOS_TOOLCHAIN_ROOT" >&2
+  exit 1
+}
+
+[ -d "$SDL_SRC" ] || {
+  echo "SDL3 source tree not found: $SDL_SRC" >&2
+  echo "Set PARTYBOARD_SDL_SRC to your Mali-fbdev SDL3 checkout." >&2
   exit 1
 }
 

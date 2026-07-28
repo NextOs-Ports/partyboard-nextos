@@ -338,9 +338,11 @@ release package ships the applicable notices under `licenses/`.
 
 ### Legal
 
-Upstream PartyBoard does not currently declare a license. This fork is therefore
-kept private, and the licensing question must be settled with upstream before
-any public release.
+Upstream PartyBoard does not declare a license. Under default copyright law all
+rights there are reserved by its authors, so this fork cannot relicense the tree
+as a whole, and the licensing question still has to be settled with upstream.
+Our own commits are MIT — see [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md) for
+exactly what that grant does and does not cover.
 
 Nintendo, Mario Party, and related names and assets are trademarks or copyrights
 of their respective owners. This is an unaffiliated community port, not endorsed
@@ -682,9 +684,12 @@ o pacote de release inclui os avisos aplicáveis em `licenses/`.
 
 ### Aviso legal
 
-O PartyBoard upstream não declara licença no momento. Por isso este fork é
-mantido privado, e a questão de licenciamento precisa ser resolvida com o
-upstream antes de qualquer publicação.
+O PartyBoard upstream não declara licença. Pela regra padrão de direito autoral,
+todos os direitos lá são reservados aos seus autores, então este fork não pode
+relicenciar a árvore como um todo, e a questão de licenciamento ainda precisa
+ser resolvida com o upstream. Nossos próprios commits são MIT — veja
+[LICENSE](LICENSE) e [NOTICE.md](NOTICE.md) para o que essa concessão cobre e o
+que ela não cobre.
 
 Nintendo, Mario Party e nomes e recursos relacionados são marcas ou direitos
 autorais de seus respectivos proprietários. Este é um port comunitário não

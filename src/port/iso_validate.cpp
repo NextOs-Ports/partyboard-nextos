@@ -81,9 +81,12 @@ struct KnownDisc {
     bool supported = false;
     std::vector<XXH128_hash_t> mHashes{};
 
-    constexpr KnownDisc(std::string_view id, Platform platform, Region region)
+    // Not constexpr: mHashes is a std::vector, so KnownDisc is not a literal type and
+    // KNOWN_DISCS below is dynamically initialized either way. Marking these constexpr
+    // only compiled by accident on toolchains with constexpr std::vector (GCC 12+).
+    KnownDisc(std::string_view id, Platform platform, Region region)
         : id(id), platform(platform), region(region) {}
-    constexpr KnownDisc(
+    KnownDisc(
         std::string_view id, Platform platform, Region region, const std::vector<std::string_view>& hashes)
         : id(id), platform(platform), region(region), supported(true)
     {
@@ -98,7 +101,7 @@ const auto KNOWN_DISCS = std::to_array<KnownDisc>({
     {"GMPP01", Platform::GameCube, Region::Europe, {"7c8d20f1032f0025b4a681d23b421078", "ce3f0e8150d6c49093db11875e827023"}},
 });
 
-constexpr const KnownDisc* find_disc(std::string_view id) {
+const KnownDisc* find_disc(std::string_view id) {
     for (const auto& disc : KNOWN_DISCS) {
         if (disc.id == id) {
             return &disc;

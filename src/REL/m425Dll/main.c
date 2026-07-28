@@ -736,6 +736,7 @@ void fn_1_1B40(omObjData *object)
 void fn_1_2784(omObjData *object)
 {
     M425DllWork2 *work = HuMemDirectMallocNum(HEAP_SYSTEM, sizeof(M425DllWork2), MEMORY_DEFAULT_NUM);
+    memset(work, 0, sizeof(*work));
     object->data = work;
     work->unk_76 = work->unk_74 = 0;
     work->unk_10.x = work->unk_28.x = 8.0f;
@@ -801,6 +802,7 @@ void fn_1_2B2C(omObjData *object)
     s32 var_r27;
 
     var_r31 = HuMemDirectMallocNum(HEAP_SYSTEM, sizeof(M425DllWork), MEMORY_DEFAULT_NUM);
+    memset(var_r31, 0, sizeof(*var_r31));
     object->data = var_r31;
     var_r31->unk_00 = object->work[0];
     var_r31->unk_01 = GWPlayerCfg[var_r31->unk_00].character;
@@ -1024,7 +1026,7 @@ void fn_1_3764(omObjData *object)
 
     M425DllWork *var_r31;
     s16 var_r30;
-    s16 var_r29;
+    s16 var_r29 = 0;
     s16 var_r27;
     s16 var_r26;
     s16 var_r25;
@@ -1195,6 +1197,7 @@ s16 fn_1_3ED0(s32 arg0, s16 arg1, HU3DPARTICLEHOOK arg2)
     Hu3DParticleHookSet(var_r31, arg2);
     var_r29 = Hu3DData[var_r31].hookData;
     var_r30 = HuMemDirectMallocNum(HEAP_SYSTEM, sizeof(M425DllUnkStruct), MEMORY_DEFAULT_NUM);
+    memset(var_r30, 0, sizeof(*var_r30));
     var_r29->work = var_r30;
     var_r30->unk_04 = 0;
     return var_r31;
@@ -1520,7 +1523,7 @@ void fn_1_5C20(HU3DMODEL *var_r27, Mtx sp8)
 {
     Mtx sp5C;
     Mtx sp2C;
-    GXColor sp26;
+    GXColor sp26 = { 0, 0, 0, 0 };
     s16 spC;
     GXTexMapID var_r29;
     M425DllUnkStruct3 *var_r31;

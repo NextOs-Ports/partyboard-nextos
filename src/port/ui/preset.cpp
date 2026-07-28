@@ -18,7 +18,7 @@ namespace {
         s.video.lockAspectRatio.setValue(true);
         s.game.enableAchievementToasts.setValue(false);
         s.game.enableControllerToasts.setValue(false);
-        s.game.internalResolutionScale.setValue(1);
+        s.game.internalResolutionScale.setValue(1.f);
         s.game.shadowResolutionMultiplier.setValue(1);
         AuroraSetViewportPolicy(AURORA_VIEWPORT_FIT);
     }
@@ -29,7 +29,7 @@ namespace {
         s.game.enableAchievementToasts.setValue(true);
         s.game.enableControllerToasts.setValue(true);
         s.game.enableQuickTransform.setValue(true);
-        s.game.internalResolutionScale.setValue(0);
+        s.game.internalResolutionScale.setValue(0.f);
         s.game.shadowResolutionMultiplier.setValue(4);
     }
 

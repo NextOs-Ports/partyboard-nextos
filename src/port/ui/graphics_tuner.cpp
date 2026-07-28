@@ -40,7 +40,9 @@ namespace {
     {
         switch (option) {
             case GraphicsOption::InternalResolution:
-                return getSettings().game.internalResolutionScale.getValue();
+                // Quarter-multiplier units keep the NextOS 0.75x profile selectable.
+                return graphics_float_carousel_units(
+                    option, getSettings().game.internalResolutionScale.getValue());
             case GraphicsOption::ShadowResolution:
                 return getSettings().game.shadowResolutionMultiplier.getValue();
         }
@@ -51,8 +53,8 @@ namespace {
     {
         switch (option) {
             case GraphicsOption::InternalResolution:
-                getSettings().game.internalResolutionScale.setValue(value);
-                VISetFrameBufferScale(static_cast<float>(value));
+                getSettings().game.internalResolutionScale.setValue(static_cast<float>(value) * 0.25f);
+                VISetFrameBufferScale(static_cast<float>(value) * 0.25f);
                 break;
             case GraphicsOption::ShadowResolution:
                 getSettings().game.shadowResolutionMultiplier.setValue(value);
@@ -169,13 +171,24 @@ Rml::String format_graphics_setting_value(GraphicsOption option, int value)
                 return fmt::format("Auto ({}×{})", width, height);
             }
             else {
-                return fmt::format("{}× ({}×{})", value, width, height);
+                return fmt::format("{:g}× ({}×{})", static_cast<float>(value) * 0.25f, width, height);
             }
         }
         case GraphicsOption::ShadowResolution:
             return fmt::format("{}×", value);
     }
     return "";
+}
+
+int graphics_float_carousel_units(GraphicsOption option, float rawValue)
+{
+    switch (option) {
+        case GraphicsOption::InternalResolution:
+            // Quarter-multiplier steps: 0 = Auto, 1 = 0.25x, 3 = 0.75x, 4 = 1x.
+            return static_cast<int>(rawValue * 4.0f + 0.5f);
+        default:
+            return static_cast<int>(rawValue + 0.5f);
+    }
 }
 
 GraphicsTuner::GraphicsTuner(GraphicsTunerProps props, bool prelaunch)

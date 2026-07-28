@@ -5,6 +5,7 @@
 #include "game/hsfload.h"
 #include "game/init.h"
 #include "game/memory.h"
+#include "game/object.h"
 #include "game/perf.h"
 #include "game/ShapeExec.h"
 #include "game/sprite.h"
@@ -16,6 +17,7 @@
 
 #ifdef TARGET_PC
 #include <assert.h>
+#include <stdlib.h>
 #endif
 
 #ifndef __MWERKS__
@@ -53,6 +55,44 @@ s16 Hu3DPauseF;
 u16 Hu3DCameraExistF;
 static u16 NoSyncF;
 s32 modelKillAllF;
+
+#ifdef TARGET_PC
+static u32 nextosShadowFrame;
+static s32 nextosShadowDivisor = -1;
+static s32 nextosHeavyMinigameShadowDivisor = -1;
+
+static s32 Hu3DShadowDivisorRead(const char *name, s32 fallback) {
+    const char *value = getenv(name);
+    s32 divisor = value != NULL ? (s32)strtol(value, NULL, 10) : fallback;
+
+    if (divisor < 1) {
+        divisor = 1;
+    }
+    if (divisor > 12) {
+        divisor = 12;
+    }
+    return divisor;
+}
+
+static BOOL Hu3DShadowShouldUpdate(void) {
+    s32 divisor;
+
+    if (nextosShadowDivisor < 0) {
+        nextosShadowDivisor = Hu3DShadowDivisorRead("PARTYBOARD_SHADOW_DIVISOR", 1);
+        nextosHeavyMinigameShadowDivisor =
+            Hu3DShadowDivisorRead("PARTYBOARD_HEAVY_MINIGAME_SHADOW_DIVISOR", nextosShadowDivisor);
+        OSReport("[perf] shadow map update divisor=%d heavy-minigame=%d\n",
+            nextosShadowDivisor, nextosHeavyMinigameShadowDivisor);
+    }
+
+    divisor = nextosShadowDivisor;
+    if ((omcurovl == DLL_m406dll || omcurovl == DLL_m412dll || omcurovl == DLL_m414dll)
+        && nextosHeavyMinigameShadowDivisor > divisor) {
+        divisor = nextosHeavyMinigameShadowDivisor;
+    }
+    return divisor == 1 || (nextosShadowFrame++ % (u32)divisor) == 0;
+}
+#endif
 
 #ifdef TARGET_PC
 #include "port/dolassets.h"
@@ -201,15 +241,29 @@ void Hu3DExec(void) {
             Hu3DCameraBit = cameraBit;
             if (NoSyncF == 0) {
                 if (Hu3DCameraNo == 0 && Hu3DShadowF != 0 && Hu3DShadowCamBit != 0) {
+#ifdef TARGET_PC
+                    if (Hu3DShadowShouldUpdate()) {
+                        Hu3DShadowExec();
+                        syncF = TRUE;
+                        GXSetDrawDone();
+                    }
+#else
                     Hu3DShadowExec();
                     syncF = TRUE;
                     GXSetDrawDone();
+#endif
                 } else if (Hu3DCameraNo != 0) {
                     syncF = TRUE;
                     GXSetDrawDone();
                 }
             } else if (Hu3DCameraNo == 0 && Hu3DShadowF != 0 && Hu3DShadowCamBit != 0) {
+#ifdef TARGET_PC
+                if (Hu3DShadowShouldUpdate()) {
+                    Hu3DShadowExec();
+                }
+#else
                 Hu3DShadowExec();
+#endif
             }
             var_r26 = &Hu3DProjection[0];
             for (i = 0; i < 4; i++, var_r26++) {
@@ -1936,6 +1990,14 @@ void Hu3DFogClear(void) {
 }
 
 void Hu3DShadowCreate(f32 arg8, f32 arg9, f32 argA) {
+#ifdef TARGET_PC
+    /*
+     * A new overlay can reuse the shadow heap before the throttled cadence
+     * naturally reaches its next update.  Force the first shadow render so a
+     * board never samples stale minigame shadow data on its floor.
+     */
+    nextosShadowFrame = 0;
+#endif
     Hu3DShadowData.size = 0xC0;
     if (Hu3DShadowData.buf == 0) {
         Hu3DShadowData.buf = HuMemDirectMalloc(HEAP_DATA, SHADOW_HEAP_SIZE);

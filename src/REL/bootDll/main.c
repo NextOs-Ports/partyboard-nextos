@@ -106,6 +106,12 @@ void ObjectSetup(void)
          HuWindowInit();
          MGSeqInit();
          HuWinInit(1);
+         /*
+          * The native boot sequence loads the common/base sample groups
+          * before selecting group set 0.  The shortened PC boot path must
+          * preserve that ordering as well.
+          */
+         HuAudSndGrpSet(0);
          HuAudSndGrpSetSet(0);
          SystemInitF = TRUE;
      }
@@ -271,12 +277,16 @@ void ObjectSetup(void)
          }
          if (!SystemInitF) {
 #ifdef __MWERKS__
-             // TODO PC
              void *group_samp;
 #endif
              tick_prev = OSGetTick();
-#ifdef __MWERKS__
-             // TODO PC
+#ifdef TARGET_PC
+             /*
+              * Match the native boot point while using the host-safe staging
+              * allocator in HuAudSndGrpSet.
+              */
+             HuAudSndGrpSet(0);
+#elif defined(__MWERKS__)
              group_samp = HuMemDirectMalloc(HEAP_DATA, msmSysGetSampSize(0));
              msmSysLoadGroup(0, group_samp, 0);
              HuMemDirectFree(group_samp);
@@ -747,11 +757,15 @@ void ObjectSetup(void)
      HuSprAttrReset(bootGrpId, 0, HUSPR_ATTR_DISPOFF);
      HuSprAttrReset(bootGrpId, 1, HUSPR_ATTR_DISPOFF);
 #ifdef __MWERKS__
-     // TODO PC
      OSReport(">>>>>>>>MSM_SE_SEL_01 %d\n", msmSeGetEntryID(2092, seNo));
      OSReport(">>>>>>>>SE Num %d\n", msmSeGetNumPlay(0));
-     HuAudSStreamPlay(20);
 #endif
+     /*
+      * Stream 20 is the native title-screen audio.  The original PC guard
+      * silenced the entire title even after the MusyX stream backend became
+      * available.
+      */
+     HuAudSStreamPlay(20);
      WipeCreate(WIPE_MODE_IN, WIPE_TYPE_NORMAL, 30);
      while (WipeStatGet()) {
          HuPrcVSleep();

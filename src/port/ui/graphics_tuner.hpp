@@ -47,6 +47,7 @@ enum class GraphicsOption {
 };
 
 Rml::String format_graphics_setting_value(GraphicsOption option, int value);
+int graphics_float_carousel_units(GraphicsOption option, float rawValue);
 
 struct GraphicsTunerProps {
     GraphicsOption option;

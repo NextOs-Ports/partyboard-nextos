@@ -86,7 +86,7 @@ struct UserSettings {
         ConfigVar<bool> enableControllerToasts;
 
         // Graphics
-        ConfigVar<int> internalResolutionScale;
+        ConfigVar<float> internalResolutionScale;
         ConfigVar<int> shadowResolutionMultiplier;
 
         // Audio

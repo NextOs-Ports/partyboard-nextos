@@ -410,6 +410,9 @@ extern "C" int port_main(int argc, char* argv[]) {
         config.pauseOnFocusLost = partyboard::getSettings().game.pauseOnFocusLost;
         // config.imGuiInitCallback = &aurora_imgui_init_callback;
         config.allowTextureDumps = false;
+        // Seed the scale before Aurora creates its render targets. Applying it only after
+        // initialization forces a live target resize and can contend for Mali's EGL context.
+        VISetFrameBufferScale(partyboard::getSettings().game.internalResolutionScale.getValue());
         auroraInfo = aurora_initialize(argc, argv, &config);
     }
 

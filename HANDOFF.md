@@ -4,14 +4,14 @@ Estado contínuo deste port. Fatos e provas, não opiniões. Atualizado a cada m
 
 ## Alvo e autorizações (do LOCK 07)
 
-- **Device único autorizado:** `192.168.31.86` (SSH com chave). Amlogic, kernel
+- **Device único autorizado:** device de teste do NextOS (SSH com chave). Amlogic, kernel
   `3.14.79-nextos-r1`, aarch64, MemTotal 938 MiB, **glibc 2.43** (NextOS Elite),
   Mali-450 MP fbdev (`/usr/lib/libGLESv2.so -> libMali.m450.so`).
-- **Fontes de dados autorizadas:** `/home/felipe/Downloads/Mario Party 4 (USA).zip`
-  (Rev.0) e `.../(Rev 1).zip` (Rev.1). Escolhida: **Rev.0** (padrão do LOCK).
-- **Workspace editável:** `/home/felipe/ports_compile/partyboard-nextos`.
-- **Empacotamento editável:** `/home/felipe/nextos_ports_android/ports/partyboard`.
-- **Referência aprovada (somente leitura):** `/home/felipe/ports_compile/dusklight-nextos`.
+- **Fontes de dados autorizadas:** cópias locais de `Mario Party 4 (USA)` Rev.0 e
+  Rev.1, fornecidas pelo usuário. Escolhida: **Rev.0** (padrão do LOCK).
+- **Workspace editável:** este repositório (workspace local).
+- **Empacotamento editável:** `<nextos_ports>/ports/partyboard` (workspace local).
+- **Referência aprovada (somente leitura):** o workspace local do Dusklight.
 
 ## Inventário (gate #1)
 
@@ -111,7 +111,7 @@ Equivale ao cmake acima com toolchain + flags SDL + disables.
 - O SDL3 do build dir do Dusklight (`.../portmaster-aarch64-focal-sdl2shim`) tem o
   driver **sdl2 shim** → com partyboard causa **recursão infinita** (símbolos
   SDL2×SDL3 colidem → stack overflow). NÃO usar.
-- Usar a SDL3 de **`/home/felipe/ports_compile/SDL3-mali-current`** (driver
+- Usar a SDL3 de **a árvore local `SDL3-mali-current`** (driver
   `mali-fbdev`, `SDL_MALI=ON`), que abre `/dev/fb0` e dlopen de GLESv2/EGL via
   libMali. Pré-compilada em `build-nextos-alpha/libSDL3.so.0`.
 - Launch env (receita Dusklight): `LD_PRELOAD=$PWD/libSDL3.so.0`,

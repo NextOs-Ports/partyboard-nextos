@@ -1,5 +1,10 @@
 #include "msm/msmmus.h"
 #include "msm/msmmem.h"
+#include "musyx/seq.h"
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 typedef struct MusPlayer_s {
     /* 0x00 */ s16 musId;
@@ -35,6 +40,171 @@ static struct {
     /* 0x014 */ void* musBuf;
     /* 0x018 */ MUS_PLAYER player[4];
 } mus;
+
+static BOOL msmMusArrRangeValid(u32 offset, u32 size, u32 limit) {
+    return offset <= limit && size <= limit - offset;
+}
+
+static BOOL msmMusSwapArr(void* data, u32 size) {
+    ARR* arr;
+    TENTRY* entry;
+    SEQ_PATTERN* pattern;
+    u8* bytes;
+    u8* visited;
+    u32 mTrack;
+    u32 maxPattern;
+    u32 noteOffset;
+    u32 offset;
+    u32 patternOffset;
+    u32 pTab;
+    u32 tTab;
+    u32 trackEnd;
+    u32* patternTable;
+    u32* trackTable;
+    u32 i;
+    u32 j;
+    u32 guard;
+    u16 patternId;
+
+    if (size < 6 * sizeof(u32)) {
+        return FALSE;
+    }
+    bytes = data;
+    arr = data;
+    tTab = __builtin_bswap32(arr->tTab);
+    pTab = __builtin_bswap32(arr->pTab);
+    mTrack = __builtin_bswap32(arr->mTrack);
+    arr->tTab = tTab;
+    arr->pTab = pTab;
+    arr->tmTab = __builtin_bswap32(arr->tmTab);
+    arr->mTrack = mTrack;
+    arr->info = __builtin_bswap32(arr->info);
+    arr->loopPoint[0] = __builtin_bswap32(arr->loopPoint[0]);
+    if (!msmMusArrRangeValid(tTab, 64 * sizeof(u32), size) || !msmMusArrRangeValid(pTab, sizeof(u32), size)) {
+        return FALSE;
+    }
+
+    visited = calloc(size, 1);
+    if (visited == NULL) {
+        return FALSE;
+    }
+    trackTable = (u32*) (bytes + tTab);
+    maxPattern = 0;
+    for (i = 0; i < 64; i++) {
+        trackTable[i] = __builtin_bswap32(trackTable[i]);
+    }
+    for (i = 0; i < 64; i++) {
+        offset = trackTable[i];
+        if (offset == 0) {
+            continue;
+        }
+        /*
+         * MusyX track arrays do not require a trailing 0xFFFF entry: the
+         * following non-zero track offset (or pTab) is their boundary.
+         * Scanning through that boundary interprets pattern-table offsets as
+         * TENTRY records and leaves the actual pattern headers unswapped.
+         */
+        trackEnd = pTab;
+        for (j = 0; j < 64; j++) {
+            if (trackTable[j] > offset && trackTable[j] < trackEnd) {
+                trackEnd = trackTable[j];
+            }
+        }
+        guard = 0;
+        while (offset < trackEnd && msmMusArrRangeValid(offset, sizeof(TENTRY), size)
+            && guard++ < 4096) {
+            if (visited[offset]) {
+                break;
+            }
+            visited[offset] = 1;
+            entry = (TENTRY*) (bytes + offset);
+            entry->time = __builtin_bswap32(entry->time);
+            patternId = __builtin_bswap16(entry->pattern);
+            entry->pattern = patternId;
+            if (patternId == 0xFFFE) {
+                u16* loopIndex = (u16*) &entry->transpose;
+                *loopIndex = __builtin_bswap16(*loopIndex);
+            } else if (patternId == 0xFFFF) {
+                break;
+            } else if (patternId > maxPattern) {
+                maxPattern = patternId;
+            }
+            offset += sizeof(TENTRY);
+        }
+    }
+
+    if (!msmMusArrRangeValid(pTab, (maxPattern + 1) * sizeof(u32), size)) {
+        free(visited);
+        return FALSE;
+    }
+    memset(visited, 0, size);
+    patternTable = (u32*) (bytes + pTab);
+    for (i = 0; i <= maxPattern; i++) {
+        patternOffset = __builtin_bswap32(patternTable[i]);
+        patternTable[i] = patternOffset;
+        if (!msmMusArrRangeValid(patternOffset, 3 * sizeof(u32) + 4, size) || visited[patternOffset]) {
+            continue;
+        }
+        visited[patternOffset] = 1;
+        pattern = (SEQ_PATTERN*) (bytes + patternOffset);
+        pattern->headerLen = __builtin_bswap32(pattern->headerLen);
+        pattern->pitchBend = __builtin_bswap32(pattern->pitchBend);
+        pattern->modulation = __builtin_bswap32(pattern->modulation);
+        noteOffset = patternOffset + 3 * sizeof(u32);
+        guard = 0;
+        while (msmMusArrRangeValid(noteOffset, 4, size) && guard++ < 16384) {
+            NOTE_DATA* note = (NOTE_DATA*) (bytes + noteOffset);
+            note->time = __builtin_bswap16(note->time);
+            if (note->key == 0xFF && note->velocity == 0xFF) {
+                break;
+            }
+            if ((note->key & 0x80) != 0 || (note->key | note->velocity) == 0) {
+                noteOffset += 4;
+            } else {
+                if (!msmMusArrRangeValid(noteOffset, sizeof(NOTE_DATA), size)) {
+                    break;
+                }
+                note->length = __builtin_bswap16(note->length);
+                noteOffset += sizeof(NOTE_DATA);
+            }
+        }
+    }
+
+    if (mTrack != 0) {
+        offset = mTrack;
+        guard = 0;
+        while (msmMusArrRangeValid(offset, sizeof(MTRACK_DATA), size) && guard++ < 4096) {
+            MTRACK_DATA* tempo = (MTRACK_DATA*) (bytes + offset);
+            tempo->time = __builtin_bswap32(tempo->time);
+            tempo->bpm = __builtin_bswap32(tempo->bpm);
+            if (tempo->time == 0xFFFFFFFF) {
+                break;
+            }
+            offset += sizeof(MTRACK_DATA);
+        }
+    }
+    free(visited);
+    return TRUE;
+}
+
+void msmMusPrepareGroup(MSM_GRP_HEAD* group, u32 dataSize, s32 groupId) {
+    u32 i;
+    u32 offset;
+
+    if (mus.musData == NULL || group == NULL || group->sngOfs > dataSize) {
+        return;
+    }
+    for (i = 0; i < mus.musMax; i++) {
+        MSM_MUS* song = &mus.musData[i];
+        if (song->songGrp != groupId || song->songOfs < 0 || song->songSize <= 0) {
+            continue;
+        }
+        offset = group->sngOfs + song->songOfs;
+        if (msmMusArrRangeValid(offset, song->songSize, dataSize)) {
+            msmMusSwapArr((u8*) group + offset, song->songSize);
+        }
+    }
+}
 
 static void msmMusPauseSub(MUS_PLAYER* player, BOOL pause, s32 speed) {
     s32 time;
@@ -354,6 +524,9 @@ int msmMusPlay(int musId, MSM_MUSPARAM* musParam) {
                 return MSM_ERR_READFAIL;
             }
             msmFioClose(&sp10);
+            if (!msmMusSwapArr(temp_r27->songBuf, temp_r28->songSize)) {
+                return MSM_ERR_INVALIDFILE;
+            }
             temp_r27->arrfile = temp_r27->songBuf;
         }
     } else {
@@ -361,7 +534,7 @@ int msmMusPlay(int musId, MSM_MUSPARAM* musParam) {
         if (temp_r3_2 == NULL) {
             return MSM_ERR_MUSGRP_NOTLOADED;
         }
-        temp_r27->arrfile = (void*) ((u32) temp_r3_2 + temp_r3_2->sngOfs + temp_r28->songOfs);
+        temp_r27->arrfile = (void*) ((uintptr_t) temp_r3_2 + temp_r3_2->sngOfs + temp_r28->songOfs);
     }
     temp_r27->busyF = 1;
     temp_r27->vol = temp_r28->vol;
@@ -422,6 +595,13 @@ s32 msmMusInit(MSM_SYS* arg0, DVDFileInfo* arg1) {
     if (msmFioRead(arg1, mus.musData, arg0->header->musSize, arg0->header->musOfs) < 0) {
         return MSM_ERR_READFAIL;
     }
+    for (var_r8 = 0; var_r8 < arg0->info->musMax; var_r8++) {
+        MSM_MUS* song = &mus.musData[var_r8];
+        song->sgid = __builtin_bswap16(song->sgid);
+        song->sid = __builtin_bswap16(song->sid);
+        song->songOfs = __builtin_bswap32(song->songOfs);
+        song->songSize = __builtin_bswap32(song->songSize);
+    }
     temp_r4 = arg0->info->dummyMusSize;
     if (temp_r4 != 0) {
         if ((mus.musBuf = msmMemAlloc(temp_r4 * arg0->info->musChanMax)) == NULL) {
@@ -435,7 +615,7 @@ s32 msmMusInit(MSM_SYS* arg0, DVDFileInfo* arg1) {
     mus.dummyMusOfs = arg0->header->dummyMusOfs;
     mus.msmEntryNum = arg0->msmEntryNum;
     for (var_r8 = 0; var_r8 < mus.musChanMax; var_r8++) {
-        mus.player[var_r8].songBuf = (void*) ((u32) mus.musBuf + arg0->info->dummyMusSize * var_r8);
+        mus.player[var_r8].songBuf = (void*) ((uintptr_t) mus.musBuf + arg0->info->dummyMusSize * var_r8);
         mus.player[var_r8].musId = -1;
         mus.player[var_r8].busyF = 0;
     }

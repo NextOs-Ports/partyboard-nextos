@@ -17,5 +17,6 @@ void msmMusStopAll(BOOL checkGrp, s32 speed);
 s32 msmMusStop(int musNo, s32 speed);
 int msmMusPlay(int musId, MSM_MUSPARAM* musParam);
 s32 msmMusInit(MSM_SYS* arg0, DVDFileInfo* arg1);
+void msmMusPrepareGroup(MSM_GRP_HEAD* group, u32 dataSize, s32 groupId);
 
 #endif

@@ -2,6 +2,8 @@
 #include "msm/msmfio.h"
 #include "msm/msmmem.h"
 
+#include <string.h>
+
 #define SE_PLAYER_EMIT (1 << 0)
 
 typedef struct SePlayer_s {
@@ -610,6 +612,7 @@ int msmSePlay(int seId, MSM_SEPARAM* param) {
 }
 
 s32 msmSeInit(MSM_SYS* arg0, DVDFileInfo* arg1) {
+    s32 i;
     s32 playerSize;
 
     se.sfx = 0;
@@ -625,6 +628,11 @@ s32 msmSeInit(MSM_SYS* arg0, DVDFileInfo* arg1) {
     }
     if (msmFioRead(arg1, se.seData, arg0->header->seSize, arg0->header->seOfs) < 0) {
         return MSM_ERR_READFAIL;
+    }
+    for (i = 0; i < arg0->info->seMax; i++) {
+        se.seData[i].gid = __builtin_bswap16(se.seData[i].gid);
+        se.seData[i].fxId = __builtin_bswap16(se.seData[i].fxId);
+        se.seData[i].pitchBend = __builtin_bswap16(se.seData[i].pitchBend);
     }
     playerSize = arg0->info->sfx * sizeof(SE_PLAYER);
     if ((se.player = msmMemAlloc(playerSize)) == NULL) {

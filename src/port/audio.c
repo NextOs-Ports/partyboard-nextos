@@ -5,10 +5,28 @@
 #include "game/object.h"
 #include "game/wipe.h"
 #include "game/gamework_data.h"
+#include "msm/msmsys.h"
 
 static int HuSePlay(int seId, MSM_SEPARAM *param);
 
 extern s16 omSysExitReq;
+
+/*
+ * Audio is part of the native boot flow.  Keep an explicit escape hatch for
+ * diagnostics, but do not require a hidden environment variable for normal
+ * launches.
+ */
+static BOOL HuAudExperimentalPlaybackEnabled(void)
+{
+    static s8 enabled = -1;
+    const char *value;
+
+    if (enabled < 0) {
+        value = getenv("PARTYBOARD_EXPERIMENTAL_AUDIO");
+        enabled = (value == NULL || value[0] != '0') ? TRUE : FALSE;
+    }
+    return enabled;
+}
 
 s32 charVoiceGroupStat[8];
 static s32 sndFXBuf[64][2];
@@ -56,10 +74,15 @@ void HuAudInit(void)
 
     if (result < 0) {
         OSReport("MSM(Sound Manager) Error:Error Code %d (continuing without sound)\n", result);
-    } else if (OSGetSoundMode() == OS_SOUND_MODE_MONO) {
-        msmSysSetOutputMode(SND_OUTPUTMODE_MONO);
     } else {
-        msmSysSetOutputMode(SND_OUTPUTMODE_SURROUND);
+        OSReport("[audio] MSM initialized\n");
+        OSReport("[audio] experimental playback %s\n",
+            HuAudExperimentalPlaybackEnabled() ? "enabled" : "disabled");
+        if (OSGetSoundMode() == OS_SOUND_MODE_MONO) {
+            msmSysSetOutputMode(SND_OUTPUTMODE_MONO);
+        } else {
+            msmSysSetOutputMode(SND_OUTPUTMODE_SURROUND);
+        }
     }
     for (i = 0; i < 64; i++) {
         sndFXBuf[i][0] = -1;
@@ -108,7 +131,15 @@ void HuAudFadeOut(s32 speed) {
 
 int HuAudFXPlay(int seId)
 {
-    return 5;
+    WipeState *wipe = &wipeData;
+
+    if (!HuAudExperimentalPlaybackEnabled()) {
+        return 5;
+    }
+    if (omSysExitReq != 0 || (wipeData.mode == WIPE_MODE_OUT && wipe->time / wipe->duration > 0.5)) {
+        return 0;
+    }
+    return HuAudFXPlayVolPan(seId, MSM_VOL_MAX, MSM_PAN_CENTER);
 }
 
 int HuAudFXPlayVol(int seId, s16 vol) {
@@ -132,15 +163,15 @@ int HuAudFXPlayVolPan(int seId, s16 vol, s16 pan)
 }
 
 void HuAudFXStop(int seNo) {
-    // msmSeStop(seNo, 0);
+    msmSeStop(seNo, 0);
 }
 
 void HuAudFXAllStop(void) {
-    // msmSeStopAll(0, 0);
+    msmSeStopAll(FALSE, 0);
 }
 
 void HuAudFXFadeOut(int seNo, s32 speed) {
-    // msmSeStop(seNo, speed);
+    msmSeStop(seNo, speed);
 }
 
 void HuAudFXPanning(int seNo, s16 pan) {
@@ -149,7 +180,7 @@ void HuAudFXPanning(int seNo, s16 pan) {
     if (omSysExitReq == 0) {
         seParam.flag = MSM_SEPARAM_PAN;
         seParam.pan = pan;
-        // msmSeSetParam(seNo, &seParam);
+        msmSeSetParam(seNo, &seParam);
     }
 }
 
@@ -176,7 +207,7 @@ void HuAudFXListnerSetEX(Vec *pos, Vec *heading, float sndDist, float sndSpeed, 
     listener.startDis = startDis + Snd3DStartDisOffset;
     listener.frontSurDis = frontSurDis + Snd3DFrontSurDisOffset;
     listener.backSurDis = backSurDis + Snd3DBackSurDisOffset;
-    // msmSeSetListener(pos, heading, sndDist + Snd3DDistOffset, sndSpeed + Snd3DSpeedOffset, &listener);
+    msmSeSetListener(pos, heading, sndDist + Snd3DDistOffset, sndSpeed + Snd3DSpeedOffset, &listener);
     OSReport("//////////////////////////////////\n");
     OSReport("sndDist %f\n", sndDist);
     OSReport("sndSpeed %f\n", sndSpeed);
@@ -189,7 +220,7 @@ void HuAudFXListnerSetEX(Vec *pos, Vec *heading, float sndDist, float sndSpeed, 
 void HuAudFXListnerUpdate(Vec *pos, Vec *heading)
 {
     if (omSysExitReq == 0) {
-        // msmSeUpdataListener(pos, heading);
+        msmSeUpdataListener(pos, heading);
     }
 }
 
@@ -203,8 +234,7 @@ int HuAudFXEmiterPlay(int seId, Vec *pos)
     seParam.pos.x = pos->x;
     seParam.pos.y = pos->y;
     seParam.pos.z = pos->z;
-    // return HuSePlay(seId, &seParam);
-    return 12;
+    return HuSePlay(seId, &seParam);
 }
 
 void HuAudFXEmiterUpDate(int seNo, Vec *pos)
@@ -217,20 +247,19 @@ void HuAudFXEmiterUpDate(int seNo, Vec *pos)
     param.pos.x = pos->x;
     param.pos.y = pos->y;
     param.pos.z = pos->z;
-    // msmSeSetParam(seNo, &param);
+    msmSeSetParam(seNo, &param);
 }
 
 void HuAudFXListnerKill(void) {
-    // msmSeDelListener();
+    msmSeDelListener();
 }
 
 void HuAudFXPauseAll(s32 pause) {
-    // msmSePauseAll(pause, 0x64);
+    msmSePauseAll(pause, 0x64);
 }
 
 s32 HuAudFXStatusGet(int seNo) {
-    // return msmSeGetStatus(seNo);
-    return 12;
+    return msmSeGetStatus(seNo);
 }
 
 s32 HuAudFXPitchSet(int seNo, s16 pitch)
@@ -241,8 +270,7 @@ s32 HuAudFXPitchSet(int seNo, s16 pitch)
     }
     param.flag = MSM_SEPARAM_PITCH;
     param.pitch = pitch;
-    // return msmSeSetParam(seNo, &param);
-    return 12;
+    return msmSeSetParam(seNo, &param);
 }
 
 s32 HuAudFXVolSet(int seNo, s16 vol)
@@ -254,17 +282,24 @@ s32 HuAudFXVolSet(int seNo, s16 vol)
     }
     param.flag = MSM_SEPARAM_VOL;
     param.vol = vol;
-    // return msmSeSetParam(seNo, &param);
-    return 12;
+    return msmSeSetParam(seNo, &param);
 }
 
 s32 HuAudSeqPlay(s16 musId) {
     s32 channel = 0;
+    static u32 playLogCount;
 
+    if (!HuAudExperimentalPlaybackEnabled()) {
+        return 0;
+    }
     if (musicOffF != 0 || omSysExitReq != 0) {
         return 0;
     }
     channel = msmMusPlay(musId, NULL);
+    if (playLogCount < 16 || channel < 0) {
+        OSReport("[audio] music play id=%d result=%d\n", musId, channel);
+        playLogCount++;
+    }
     return channel;
 }
 
@@ -272,12 +307,12 @@ void HuAudSeqStop(s32 musNo) {
     if (musicOffF != 0 || omSysExitReq != 0) {
         return;
     }
-    // msmMusStop(musNo, 0);
+    msmMusStop(musNo, 0);
 }
 
 void HuAudSeqFadeOut(s32 musNo, s32 speed) {
     if (musicOffF == 0) {
-        // msmMusStop(musNo, speed);
+        msmMusStop(musNo, speed);
     }
 }
 
@@ -285,70 +320,76 @@ void HuAudSeqAllFadeOut(s32 speed) {
     s16 i;
 
     for (i = 0; i < 4; i++) {
-        // if (msmMusGetStatus(i) == 2) {
-        //     msmMusStop(i, speed);
-        // }
+        if (msmMusGetStatus(i) == MSM_MUS_PLAY) {
+            msmMusStop(i, speed);
+        }
     }
 }
 
 void HuAudSeqAllStop(void) {
-    // msmMusStopAll(0, 0);
+    msmMusStopAll(FALSE, 0);
 }
 
 void HuAudSeqPauseAll(s32 pause) {
-    // msmMusPauseAll(pause, 0x64);
+    msmMusPauseAll(pause, 0x64);
 }
 
 void HuAudSeqPause(s32 musNo, s32 pause, s32 speed) {
     if (musicOffF != 0 || omSysExitReq != 0) {
         return;
     }
-    // msmMusPause(musNo, pause, speed);
+    msmMusPause(musNo, pause, speed);
 }
 
 s32 HuAudSeqMidiCtrlGet(s32 musNo, s8 channel, s8 ctrl) {
     if (musicOffF != 0 || omSysExitReq != 0) {
         return 0;
     }
-    // return msmMusGetMidiCtrl(musNo, channel, ctrl);
-    return 12;
+    return msmMusGetMidiCtrl(musNo, channel, ctrl);
 }
 
 s32 HuAudSStreamPlay(s16 streamId) {
     MSM_STREAMPARAM param;
-    s32 result = 0;
+    s32 result;
+    static u32 playLogCount;
 
+    if (!HuAudExperimentalPlaybackEnabled()) {
+        return 0;
+    }
     if (musicOffF != 0 || omSysExitReq != 0) {
         return 0;
     }
     param.flag = MSM_STREAMPARAM_NONE ;
-    // result = msmStreamPlay(streamId, &param);
+    result = msmStreamPlay(streamId, &param);
+    if (playLogCount < 16 || result < 0) {
+        OSReport("[audio] stream play id=%d result=%d\n", streamId, result);
+        playLogCount++;
+    }
     return result;
 }
 
 void HuAudSStreamStop(s32 seNo) {
     if (musicOffF == 0) {
-        // msmStreamStop(seNo, 0);
+        msmStreamStop(seNo, 0);
     }
 }
 
 void HuAudSStreamFadeOut(s32 seNo, s32 speed) {
     if (musicOffF == 0) {
-        // msmStreamStop(seNo, speed);
+        msmStreamStop(seNo, speed);
     }
 }
 
 void HuAudSStreamAllFadeOut(s32 speed) {
-    // msmStreamStopAll(speed);
+    msmStreamStopAll(speed);
 }
 
 void HuAudSStreamAllStop(void) {
-    // msmStreamStopAll(0);
+    msmStreamStopAll(0);
 }
 
 s32 HuAudSStreamStatGet(s32 seNo) {
-    return 0;
-    // return msmStreamGetStatus(seNo);
+    return msmStreamGetStatus(seNo);
 }
 
 SHARED_SYM SNDGRPTBL sndGrpTable[] = {
@@ -476,41 +517,79 @@ void HuAudDllSndGrpSet(u16 ovl) {
     }
 }
 
-void HuAudSndGrpSetSet(s16 dataSize) {
+void HuAudSndGrpSetSet(s16 grpSet) {
+    void *buf;
+    s32 result;
+
+    if (!HuAudExperimentalPlaybackEnabled()) {
+        return;
+    }
+    if (sndGroupBak == grpSet) {
+        return;
+    }
+    msmMusStopAll(TRUE, 0);
+    msmSeStopAll(TRUE, 0);
+    sndGroupBak = grpSet;
+    result = msmSysDelGroupAll();
+    if (result != 0) {
+        OSReport("[audio] group set %d delete failed: %d\n", grpSet, result);
+        return;
+    }
+    buf = malloc(msmSysGetSampSize(TRUE));
+    if (buf == NULL) {
+        OSReport("[audio] group set %d staging allocation failed\n", grpSet);
+        return;
+    }
+    result = msmSysLoadGroupSet(grpSet, buf);
+    free(buf);
+    OSReport("[audio] group set %d result=%d\n", grpSet, result);
 }
 
 void HuAudSndGrpSet(s16 grpId) {
     void *buf;
+    s32 result;
 
-    // buf = HuMemDirectMalloc(HEAP_DATA, msmSysGetSampSize(grpId));
-    // msmSysLoadGroup(grpId, buf, 0);
-    //HuMemDirectFree(buf);
+    if (!HuAudExperimentalPlaybackEnabled()) {
+        return;
+    }
+    buf = malloc(msmSysGetSampSize(grpId != 0));
+    if (buf == NULL) {
+        OSReport("[audio] group %d staging allocation failed\n", grpId);
+        return;
+    }
+    result = msmSysLoadGroup(grpId, buf);
+    free(buf);
+    OSReport("[audio] group %d result=%d\n", grpId, result);
 }
 
 void HuAudSndCommonGrpSet(s16 grpId, s32 groupCheck) {
     s16 err;
-    OSTick osTick;
     void *buf;
     s16 i;
 
+    if (!HuAudExperimentalPlaybackEnabled()) {
+        return;
+    }
     for (i = 0; i < 8; i++) {
         charVoiceGroupStat[i] = 0;
     }
-    // msmMusStopAll(1, 0);
-    // msmSeStopAll(1, 0);
-    osTick = OSGetTick();
-    // while ((msmMusGetNumPlay(1) != 0 || msmSeGetNumPlay(1) != 0)
-    //     && OSTicksToMilliseconds(OSGetTick() - osTick) < 500);
+    msmMusStopAll(TRUE, 0);
+    msmSeStopAll(TRUE, 0);
     OSReport("CommonGrpSet %d\n", grpId);
-    // if (groupCheck != 0) {
-    //     // err = msmSysDelGroupBase(0);
-    //     if (err < 0) {
-    //         OSReport("Del Group Error %d\n", err);
-    //     }
-    // }
-    // buf = HuMemDirectMalloc(HEAP_DATA, msmSysGetSampSize(grpId));
-    // msmSysLoadGroupBase(grpId, buf);
-    // HuMemDirectFree(buf);
+    if (groupCheck != 0) {
+        err = msmSysDelGroupBase(0);
+        if (err < 0) {
+            OSReport("[audio] common group delete failed: %d\n", err);
+        }
+    }
+    buf = malloc(msmSysGetSampSize(TRUE));
+    if (buf == NULL) {
+        OSReport("[audio] common group %d staging allocation failed\n", grpId);
+        return;
+    }
+    err = msmSysLoadGroupBase(grpId, buf);
+    free(buf);
+    OSReport("[audio] common group %d result=%d\n", grpId, err);
     sndGroupBak = -1;
 }
 
@@ -531,15 +610,16 @@ void HuAudAUXVolSet(s8 auxA, s8 auxB) {
 
 void HuAudSndCharGrpSet(s16 ovl) {
     SNDGRPTBL *sndGrp;
-    OSTick osTick;
     s16 numNotChars;
     s16 grpId;
-    s16 temp_r25;
+    s16 result;
     s16 character;
-    
     void *buf;
     s16 i;
 
+    if (!HuAudExperimentalPlaybackEnabled()) {
+        return;
+    }
     if (ovl != DLL_NONE) {
         sndGrp = sndGrpTable;
         while (1) {
@@ -562,30 +642,27 @@ void HuAudSndCharGrpSet(s16 ovl) {
         for (i = 0; i < 8; i++) {
             charVoiceGroupStat[i] = 0;
         }
-        // msmMusStopAll(1, 0);
-        // msmSeStopAll(1, 0);
-        osTick = OSGetTick();
-        // while ((msmMusGetNumPlay(1) != 0 || msmSeGetNumPlay(1) != 0)
-        //     && OSTicksToMilliseconds(OSGetTick() - osTick) < 500);
+        msmMusStopAll(TRUE, 0);
+        msmSeStopAll(TRUE, 0);
         OSReport("############CharGrpSet\n");
-        // temp_r25 = msmSysDelGroupBase(0);
-        // if (temp_r25 < 0) {
-        //     OSReport("Del Group Error %d\n", temp_r25);
-        // } else {
-        //     OSReport("Del Group OK\n");
-        // }
+        result = msmSysDelGroupBase(0);
+        if (result < 0) {
+            OSReport("[audio] character group delete failed: %d\n", result);
+        }
         for (i = 0; i < 4; i++) {
             character = GWPlayerCfg[i].character;
-            if (character >= 0 && character < 8 && character != 0xFF) {
+            if (character >= 0 && character < 8 && character != 0xFF
+                && charVoiceGroupStat[character] == 0) {
                 charVoiceGroupStat[character] = 1;
                 grpId = character + 10;
-                // buf = HuMemDirectMalloc(HEAP_DATA, msmSysGetSampSize(grpId));
-                #if VERSION_NTSC
-                // msmSysLoadGroupBase(grpId, buf);
-                #else
-                temp_r25 = msmSysLoadGroupBase(grpId, buf);
-                #endif
-                // HuMemDirectFree(buf);
+                buf = malloc(msmSysGetSampSize(TRUE));
+                if (buf == NULL) {
+                    OSReport("[audio] character group %d staging allocation failed\n", grpId);
+                    continue;
+                }
+                result = msmSysLoadGroupBase(grpId, buf);
+                free(buf);
+                OSReport("[audio] character group %d result=%d\n", grpId, result);
             }
         }
         sndGroupBak = -1;
@@ -614,64 +691,68 @@ s32 CharFXPlay(s16 charNo, s16 seId)
 {
     MSM_SEPARAM param;
 
-    // if (omSysExitReq != 0) {
-    //     return 0;
-    // }
-    // seId += (charNo << 6);
-    // param.flag = MSM_SEPARAM_NONE;
-    // if (HuAuxAVol != -1) {
-    //     param.flag |= MSM_SEPARAM_AUXVOLA;
-    // }
-    // if (HuAuxBVol != -1) {
-    //     param.flag |= MSM_SEPARAM_AUXVOLB;
-    // }
-    // param.auxAVol = HuAuxAVol;
-    // param.auxBVol = HuAuxBVol;
+    if (omSysExitReq != 0) {
+        return 0;
+    }
+    seId += (charNo << 6);
+    param.flag = MSM_SEPARAM_NONE;
+    if (HuAuxAVol != -1) {
+        param.flag |= MSM_SEPARAM_AUXVOLA;
+    }
+    if (HuAuxBVol != -1) {
+        param.flag |= MSM_SEPARAM_AUXVOLB;
+    }
+    param.auxAVol = HuAuxAVol;
+    param.auxBVol = HuAuxBVol;
     return HuSePlay(seId, &param);
 }
 
 s32 CharFXPlayPos(s16 charNo, s16 seId, Vec *pos) {
     MSM_SEPARAM param;
 
-    // if (omSysExitReq != 0) {
-    //     return 0;
-    // }
-    // seId += (charNo << 6);
-    // param.flag = MSM_SEPARAM_POS;
-    // if (HuAuxAVol != -1) {
-    //     param.flag |= MSM_SEPARAM_AUXVOLA;
-    // }
-    // if (HuAuxBVol != -1) {
-    //     param.flag |= MSM_SEPARAM_AUXVOLB;
-    // }
-    // param.auxAVol = HuAuxAVol;
-    // param.auxBVol = HuAuxBVol;
-    // param.pos.x = pos->x;
-    // param.pos.y = pos->y;
-    // param.pos.z = pos->z;
+    if (omSysExitReq != 0) {
+        return 0;
+    }
+    seId += (charNo << 6);
+    param.flag = MSM_SEPARAM_POS;
+    if (HuAuxAVol != -1) {
+        param.flag |= MSM_SEPARAM_AUXVOLA;
+    }
+    if (HuAuxBVol != -1) {
+        param.flag |= MSM_SEPARAM_AUXVOLB;
+    }
+    param.auxAVol = HuAuxAVol;
+    param.auxBVol = HuAuxBVol;
+    param.pos.x = pos->x;
+    param.pos.y = pos->y;
+    param.pos.z = pos->z;
     return HuSePlay(seId, &param);
 }
 
 void CharFXStop(s16 charNo, s16 seId) {
-    // int seNoTbl[MSM_ENTRY_SENO_MAX]; // size unknown (min: 30, max: 33)
-    // u16 id;
-    // u16 i;
+    int seNoTbl[MSM_ENTRY_SENO_MAX];
+    u16 id;
+    u16 i;
 
-    // seId += (charNo << 6);
-    // id = msmSeGetEntryID(seId, seNoTbl);
-    // for (i = 0; i < id; i++) {
-    //     msmSeStop(seNoTbl[i], 0);
-    // }
+    seId += (charNo << 6);
+    id = msmSeGetEntryID(seId, seNoTbl);
+    for (i = 0; i < id; i++) {
+        msmSeStop(seNoTbl[i], 0);
+    }
 }
 
 static int HuSePlay(int seId, MSM_SEPARAM *param)
 {
     s32 result;
+    static u32 playLogCount;
 
-    // result = msmSePlay(seId, param);
-    // if (result < 0) {
-    //     OSReport("#########SE Entry Error<SE %d:ErrorNo %d>\n", seId, result);
-    // }
-    return 12;
-    // return result;
+    if (!HuAudExperimentalPlaybackEnabled()) {
+        return 12;
+    }
+    result = msmSePlay(seId, param);
+    if (playLogCount < 24 || result < 0) {
+        OSReport("[audio] effect play id=%d result=%d\n", seId, result);
+        playLogCount++;
+    }
+    return result;
 }

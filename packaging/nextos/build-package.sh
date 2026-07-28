@@ -60,8 +60,12 @@ cp "$BUILD/partyboard" "$PORT/partyboard"
 # All GameCube REL modules + the shared DOL (every *.so the build produced).
 for so in "$BUILD"/*.so; do cp "$so" "$PORT/"; done
 
-# SDL3 (mali-fbdev driver) + bundled deps.
-cp "$SDL3" "$PORT/libSDL3.so.0"
+# SDL3 (mali-fbdev driver) goes in its own directory: the launcher prefers the
+# firmware's SDL3 when it can satisfy our symbols, and reaches this copy only by
+# putting this directory on the search path. Keeping it out of $PORT is what
+# makes that choice possible at all.
+mkdir -p "$PORT/sdl3-fallback"
+cp "$SDL3" "$PORT/sdl3-fallback/libSDL3.so.0"
 cp "$LIBPNG" "$PORT/libpng16.so.16"
 cp "$LIBZ" "$PORT/libz.so.1"
 
@@ -78,7 +82,14 @@ cp "$ROOT/packaging/nextos/gameinfo.xml" "$PORT/gameinfo.xml"
 cp "$ROOT/packaging/nextos/initial_pipeline_cache.db" "$PORT/initial_pipeline_cache.db"
 cp "$ROOT/packaging/nextos/initial_program_binary_cache.db" "$PORT/initial_program_binary_cache.db"
 
+# Player-facing notes. These live in the repo so a rebuild reproduces the
+# release instead of quietly dropping them.
+cp "$ROOT/packaging/nextos/README.txt" "$STAGE/README.txt"
+cp "$ROOT/packaging/nextos/PUT-YOUR-DISC-IMAGE-HERE.txt" "$PORT/assets/PUT-YOUR-DISC-IMAGE-HERE.txt"
+
 mkdir -p "$PORT/licenses"
+cp "$ROOT/packaging/nextos/NEXTOS-LICENSE" "$PORT/licenses/NEXTOS-LICENSE"
+cp "$ROOT/NOTICE.md" "$PORT/licenses/NOTICE.md"
 cp "$ROOT/README.md" "$PORT/licenses/PARTYBOARD-README.md" 2>/dev/null || true
 cp "$ROOT/extern/aurora/LICENSE" "$PORT/licenses/AURORA-LICENSE" 2>/dev/null || true
 cp "$ROOT/extern/libco/LICENSE" "$PORT/licenses/LIBCO-LICENSE" 2>/dev/null || true
@@ -92,6 +103,8 @@ fi
 # Menu art.
 if [ -n "$MENU_IMAGE" ]; then
   cp "$MENU_IMAGE" "$STAGE/ports_scripts/images/PartyBoard.png"
+elif [ -f "$ROOT/packaging/nextos/PartyBoard-menu.png" ]; then
+  cp "$ROOT/packaging/nextos/PartyBoard-menu.png" "$STAGE/ports_scripts/images/PartyBoard.png"
 elif [ -f "$PORT/res/logo.png" ]; then
   cp "$PORT/res/logo.png" "$STAGE/ports_scripts/images/PartyBoard.png"
 fi
@@ -99,9 +112,11 @@ fi
 # Strip every recompilable target binary with the same official NextOS
 # toolchain used by the build, then drop build-specific RUNPATH entries
 # (launcher sets LD_LIBRARY_PATH).
-"$STRIP_TOOL" --strip-unneeded "$PORT/partyboard" "$PORT"/*.so "$PORT"/lib*.so.*
+"$STRIP_TOOL" --strip-unneeded "$PORT/partyboard" "$PORT"/*.so "$PORT"/lib*.so.* \
+  "$PORT/sdl3-fallback/libSDL3.so.0"
 if command -v patchelf >/dev/null 2>&1; then
-  for elf in "$PORT/partyboard" "$PORT"/*.so "$PORT"/lib*.so.*; do
+  for elf in "$PORT/partyboard" "$PORT"/*.so "$PORT"/lib*.so.* \
+             "$PORT/sdl3-fallback/libSDL3.so.0"; do
     patchelf --remove-rpath "$elf"
   done
 fi

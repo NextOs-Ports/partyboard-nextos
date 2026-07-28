@@ -30,7 +30,7 @@ GAMEDIR="${PARTYBOARD_GAMEDIR:-$ROMSROOT/ports/partyboard}"
 RUNTIME_DIR="$GAMEDIR/runtime"
 ASSETS_DIR="$GAMEDIR/assets"
 BIN="$GAMEDIR/partyboard"
-SDL3_LIB="$GAMEDIR/libSDL3.so.0"
+SDL3_LIB="$GAMEDIR/sdl3-fallback/libSDL3.so.0"
 LOGFILE="$GAMEDIR/log.txt"
 
 mkdir -p "$RUNTIME_DIR/home" "$RUNTIME_DIR/config" "$RUNTIME_DIR/cache" "$ASSETS_DIR"
@@ -103,10 +103,33 @@ cat >"$CFG" <<EOF
 }
 EOF
 
-export LD_LIBRARY_PATH="$GAMEDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export LD_PRELOAD="$SDL3_LIB${LD_PRELOAD:+:$LD_PRELOAD}"
+# SDL3 selection. The firmware may already ship an SDL3 with a video driver it
+# validated for its own hardware; prefer it when it is complete enough to run
+# us, and keep the bundled copy as the fallback. The bundled library lives in
+# its own directory precisely so it can be left off the search path here.
+#
+# The check is the dynamic linker itself, in the mode `ldd -r` uses:
+# LD_TRACE_LOADED_OBJECTS makes ld.so resolve the link map and exit without ever
+# running main, and LD_WARN + LD_BIND_NOW make it report every symbol it could
+# not bind. So this costs milliseconds, never reaches SDL, and never touches the
+# screen. Only a symbol that fails to resolve sends us to the bundled copy.
+SDL3_FALLBACK_DIR="$GAMEDIR/sdl3-fallback"
+SDL3_SOURCE="bundled"
+if [ -z "${PARTYBOARD_FORCE_BUNDLED_SDL3:-}" ] && [ -e /usr/lib/libSDL3.so.0 ]; then
+  SDL3_PROBE="$(LD_TRACE_LOADED_OBJECTS=1 LD_WARN=yes LD_BIND_NOW=yes \
+                LD_LIBRARY_PATH="$GAMEDIR" "$BIN" 2>&1)"
+  if [ -n "$SDL3_PROBE" ] && ! printf '%s' "$SDL3_PROBE" | grep -qiE "undefined symbol|not found"; then
+    SDL3_SOURCE="system"
+  fi
+fi
 
-# NextOS Mali-450 fbdev: the bundled SDL3 carries the mali video backend.
+if [ "$SDL3_SOURCE" = "system" ]; then
+  export LD_LIBRARY_PATH="$GAMEDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+else
+  export LD_LIBRARY_PATH="$SDL3_FALLBACK_DIR:$GAMEDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
+# NextOS Mali-450 fbdev: both SDL3 copies carry the mali video backend.
 export SDL_VIDEODRIVER=mali
 export SDL_AUDIODRIVER=alsa
 export SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE="${SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE:-plughw:0,0}"
@@ -125,6 +148,7 @@ echo "[partyboard] NextOS Mali-450 GLES2"
 echo "[partyboard] disc=$(basename "$DVD_PATH") scale=$PARTYBOARD_INTERNAL_SCALE shadows=1/$PARTYBOARD_SHADOW_DIVISOR heavy=1/$PARTYBOARD_HEAVY_MINIGAME_SHADOW_DIVISOR"
 echo "[partyboard] heavy particles: Avalanche=1/$PARTYBOARD_AVALANCHE_PARTICLE_DIVISOR Blizzard=1/$PARTYBOARD_BLIZZARD_PARTICLE_DIVISOR reflections=$PARTYBOARD_HEAVY_MINIGAME_REFLECTIONS"
 echo "[partyboard] audio buffer=$SDL_AUDIO_DEVICE_SAMPLE_FRAMES frames"
+echo "[partyboard] SDL3: $SDL3_SOURCE"
 chmod +x "$BIN" 2>/dev/null || true
 command -v pm_platform_helper >/dev/null 2>&1 && pm_platform_helper "$BIN"
 

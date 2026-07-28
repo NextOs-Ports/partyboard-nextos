@@ -27,6 +27,7 @@
 #include "aurora/dvd.h"
 #include <aurora/aurora.h>
 #include <aurora/event.h>
+#include <SDL3/SDL_gamepad.h>
 #include <stdlib.h>
 
 const char *__asan_default_options()
@@ -40,6 +41,67 @@ bool PartyBoard_IsGameLaunched = FALSE;
 bool PartyBoard_RestartRequested = FALSE;
 
 bool disableFrameLimiter = FALSE;
+
+typedef struct PartyBoardExitChord {
+    SDL_JoystickID joystick;
+    bool selectHeld;
+    bool startHeld;
+} PartyBoardExitChord;
+
+static bool PartyBoard_HandleExitChord(const SDL_Event *event)
+{
+    static PartyBoardExitChord pads[4];
+    PartyBoardExitChord *pad = NULL;
+    s32 i;
+
+    if (event->type == SDL_EVENT_GAMEPAD_REMOVED) {
+        for (i = 0; i < 4; i++) {
+            if (pads[i].joystick == event->gdevice.which) {
+                memset(&pads[i], 0, sizeof(pads[i]));
+                break;
+            }
+        }
+        return FALSE;
+    }
+    if (event->type != SDL_EVENT_GAMEPAD_BUTTON_DOWN &&
+        event->type != SDL_EVENT_GAMEPAD_BUTTON_UP) {
+        return FALSE;
+    }
+    if (event->gbutton.button != SDL_GAMEPAD_BUTTON_BACK &&
+        event->gbutton.button != SDL_GAMEPAD_BUTTON_START) {
+        return FALSE;
+    }
+
+    for (i = 0; i < 4; i++) {
+        if (pads[i].joystick == event->gbutton.which) {
+            pad = &pads[i];
+            break;
+        }
+        if (pad == NULL && pads[i].joystick == 0) {
+            pad = &pads[i];
+        }
+    }
+    if (pad == NULL) {
+        return FALSE;
+    }
+    if (pad->joystick == 0) {
+        pad->joystick = event->gbutton.which;
+    }
+
+    if (event->gbutton.button == SDL_GAMEPAD_BUTTON_BACK) {
+        pad->selectHeld = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+    } else {
+        pad->startHeld = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+    }
+    if (!pad->selectHeld || !pad->startHeld) {
+        return FALSE;
+    }
+
+    OSReport("[input] Select + Start exit requested\n");
+    PartyBoard_IsShuttingDown = TRUE;
+    PartyBoard_IsRunning = FALSE;
+    return TRUE;
+}
 #endif
 
 extern FileListEntry _ovltbl[];
@@ -71,6 +133,60 @@ void PartyBoard_RequestRestart(void)
 {
     PartyBoard_RestartRequested = SUPPORTS_PROCESS_RESTART;
     PartyBoard_IsRunning = FALSE;
+}
+
+/*
+ * Dev-only frame anatomy, enabled with PARTYBOARD_PERF_SPLIT=1: accumulates the
+ * recording-thread time of each main-loop phase and reports averages every 300
+ * frames.  Complements aurora's [fps] stall split (which covers the aurora side).
+ */
+#include <time.h>
+enum {
+    PB_SPLIT_EVENTS,
+    PB_SPLIT_LOGIC,
+    PB_SPLIT_HU3D,
+    PB_SPLIT_DONE_RENDER,
+    PB_SPLIT_END_FRAME,
+    PB_SPLIT_LIMITER,
+    PB_SPLIT_COUNT
+};
+static s32 pbSplitEnabled = -1;
+static s64 pbSplitNs[PB_SPLIT_COUNT];
+static u32 pbSplitFrames;
+static s64 pbSplitMark;
+
+static s64 PartyBoard_PerfNow(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (s64)ts.tv_sec * 1000000000ll + ts.tv_nsec;
+}
+
+static void PartyBoard_PerfSplitPhase(s32 phase)
+{
+    s64 now;
+
+    if (pbSplitEnabled < 0) {
+        const char *env = getenv("PARTYBOARD_PERF_SPLIT");
+        pbSplitEnabled = env != NULL && env[0] == '1';
+    }
+    if (!pbSplitEnabled) {
+        return;
+    }
+    now = PartyBoard_PerfNow();
+    if (phase >= 0) {
+        pbSplitNs[phase] += now - pbSplitMark;
+    }
+    pbSplitMark = now;
+    if (phase == PB_SPLIT_LIMITER && ++pbSplitFrames == 300) {
+        const double inv = 1.0 / (300.0 * 1.0e6);
+        OSReport("[perf-split] events %.1f logic %.1f hu3d %.1f done %.1f end %.1f limit %.1f ms/frame\n",
+            pbSplitNs[PB_SPLIT_EVENTS] * inv, pbSplitNs[PB_SPLIT_LOGIC] * inv, pbSplitNs[PB_SPLIT_HU3D] * inv,
+            pbSplitNs[PB_SPLIT_DONE_RENDER] * inv, pbSplitNs[PB_SPLIT_END_FRAME] * inv,
+            pbSplitNs[PB_SPLIT_LIMITER] * inv);
+        memset(pbSplitNs, 0, sizeof(pbSplitNs));
+        pbSplitFrames = 0;
+    }
 }
 #endif
 
@@ -125,6 +241,7 @@ void main(void)
     while (1) {
 #endif
 #ifdef TARGET_PC
+        PartyBoard_PerfSplitPhase(-1);
         const AuroraEvent *event = aurora_update();
         bool exiting = false;
         while (event != NULL && event->type != AURORA_NONE) {
@@ -133,6 +250,10 @@ void main(void)
                 break;
             }
             if (event->type == AURORA_SDL_EVENT) {
+                if (PartyBoard_HandleExitChord(&event->sdl)) {
+                    exiting = true;
+                    break;
+                }
                 ui_handle_sdl_event(&event->sdl);
                 if (partyboard_settings_enableTurboKeybind()) {
                     if (event->sdl.type == SDL_EVENT_KEY_DOWN) {
@@ -163,6 +284,9 @@ void main(void)
         aurora_begin_frame();
 #endif
         HuSysBeforeRender();
+#ifdef TARGET_PC
+        PartyBoard_PerfSplitPhase(PB_SPLIT_EVENTS);
+#endif
         GXSetGPMetric(GX_PERF0_CLIP_VTX, GX_PERF1_VERTICES);
         GXClearGPMetric();
         GXSetVCacheMetric(GX_VC_ALL);
@@ -177,6 +301,9 @@ void main(void)
 
         HuPrcCall(1);
         MGSeqMain();
+#ifdef TARGET_PC
+        PartyBoard_PerfSplitPhase(PB_SPLIT_LOGIC);
+#endif
         HuPerfBegin(1);
         Hu3DExec();
         HuDvdErrorWatch();
@@ -185,6 +312,9 @@ void main(void)
 
         pfDrawFonts();
         HuPerfEnd(1);
+#ifdef TARGET_PC
+        PartyBoard_PerfSplitPhase(PB_SPLIT_HU3D);
+#endif
 
         msmMusFdoutEnd();
         HuSysDoneRender(retrace);
@@ -196,11 +326,14 @@ void main(void)
         GlobalCounter++;
 
 #ifdef TARGET_PC
+        PartyBoard_PerfSplitPhase(PB_SPLIT_DONE_RENDER);
         ui_update();
         aurora_end_frame();
+        PartyBoard_PerfSplitPhase(PB_SPLIT_END_FRAME);
         if (!disableFrameLimiter) {
             frame_limiter();
         }
+        PartyBoard_PerfSplitPhase(PB_SPLIT_LIMITER);
 #endif
     }
 

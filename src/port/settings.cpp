@@ -35,7 +35,7 @@ UserSettings g_userSettings = {
         .enableControllerToasts {"game.enableControllerToasts", true},
 
         // Graphics
-        .internalResolutionScale {"game.internalResolutionScale", 0},
+        .internalResolutionScale {"game.internalResolutionScale", 0.f},
         .shadowResolutionMultiplier {"game.shadowResolutionMultiplier", 1},
 
         // Audio

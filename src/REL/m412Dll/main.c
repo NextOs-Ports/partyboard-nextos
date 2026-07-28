@@ -15,6 +15,55 @@
 #include "math.h"
 #include "version.h"
 
+#ifdef TARGET_PC
+#include <stdlib.h>
+
+static s32 nextosM412Reflections = -1;
+static s32 nextosM412ParticleDivisor = -1;
+
+static void NextOSM412SettingsInit(void)
+{
+    if (nextosM412Reflections < 0) {
+        const char *reflectionValue = getenv("PARTYBOARD_HEAVY_MINIGAME_REFLECTIONS");
+        const char *particleValue = getenv("PARTYBOARD_BLIZZARD_PARTICLE_DIVISOR");
+
+        nextosM412Reflections = reflectionValue != NULL ? (strtol(reflectionValue, NULL, 10) != 0) : 1;
+        nextosM412ParticleDivisor = particleValue != NULL ? (s32)strtol(particleValue, NULL, 10) : 1;
+        if (nextosM412ParticleDivisor < 1) {
+            nextosM412ParticleDivisor = 1;
+        }
+        if (nextosM412ParticleDivisor > 4) {
+            nextosM412ParticleDivisor = 4;
+        }
+        OSReport("[perf] Mr. Blizzard reflections=%d particle-divisor=%d\n",
+            nextosM412Reflections, nextosM412ParticleDivisor);
+    }
+}
+
+static void NextOSM412ReflectionModel(s16 model)
+{
+    NextOSM412SettingsInit();
+    if (!nextosM412Reflections) {
+        Hu3DModelCameraSet(model, 0);
+    }
+}
+
+static s16 NextOSM412ParticleCount(s16 originalCount)
+{
+    s32 reducedCount;
+
+    NextOSM412SettingsInit();
+    reducedCount = originalCount / nextosM412ParticleDivisor;
+    if (reducedCount < 0x20) {
+        reducedCount = 0x20;
+    }
+    return (s16)reducedCount;
+}
+#else
+#define NextOSM412ReflectionModel(model) ((void)0)
+#define NextOSM412ParticleCount(count) (count)
+#endif
+
 // bss
 s16 lbl_1_bss_7A0;
 s16 lbl_1_bss_79E;
@@ -269,6 +318,7 @@ void fn_1_8BC(void)
         temp_r31->unkC[var_r26] = Hu3DJointMotion(var_r29, var_r27);
         Hu3DMotionSet(var_r29, temp_r31->unkC[3]);
         temp_r31->unk2 = var_r29 = Hu3DModelLink(var_r20);
+        NextOSM412ReflectionModel(temp_r31->unk2);
         Hu3DModelPosSet(var_r29, temp_r31->unk2C.x, temp_r31->unk2C.y - 10.0f, temp_r31->unk2C.z);
         Hu3DModelRotSet(var_r29, temp_r31->unk38.x, temp_r31->unk38.y, temp_r31->unk38.z);
         Hu3DModelScaleSet(var_r29, 1.0f, -1.0f, 1.0f);
@@ -297,6 +347,7 @@ void fn_1_8BC(void)
         Hu3DModelShadowSet(var_r29);
         Hu3DModelShadowDispOff(var_r29);
         temp_r31->unk8 = Hu3DModelLink(var_r19);
+        NextOSM412ReflectionModel(temp_r31->unk8);
         Hu3DModelLayerSet(var_r29, 0);
         Hu3DModelAttrSet(temp_r31->unk8, HU3D_ATTR_DISPOFF);
         var_r23 = HuPrcChildCreate(fn_1_2A1C, 0x2000, 0x3000, 0, HuPrcCurrentGet());
@@ -342,6 +393,7 @@ void fn_1_8BC(void)
     }
     var_r27 = HuDataSelHeapReadNum(DATA_MAKE_NUM(DATADIR_M412, 0x16), MEMORY_DEFAULT_NUM, HEAP_DATA);
     temp_r31->unk2 = var_r29 = Hu3DModelCreate(var_r27);
+    NextOSM412ReflectionModel(temp_r31->unk2);
 
     for (var_r26 = 0; var_r26 < 5; var_r26++) {
         var_r27 = HuDataSelHeapReadNum(var_r26 + DATA_MAKE_NUM(DATADIR_M412, 0x17), MEMORY_DEFAULT_NUM, HEAP_DATA);
@@ -360,6 +412,7 @@ void fn_1_8BC(void)
     Hu3DModelShadowSet(var_r29);
     Hu3DModelShadowDispOff(var_r29);
     temp_r31->unk8 = Hu3DModelLink(temp_r31->unk6);
+    NextOSM412ReflectionModel(temp_r31->unk8);
     Hu3DModelLayerSet(temp_r31->unk8, 0);
     Hu3DModelAttrSet(temp_r31->unk8, HU3D_ATTR_DISPOFF);
     var_r27 = HuDataSelHeapReadNum(DATA_MAKE_NUM(DATADIR_M412, 0x05), MEMORY_DEFAULT_NUM, HEAP_DATA);
@@ -407,6 +460,7 @@ void fn_1_8BC(void)
         Hu3DModelLayerSet(temp_r30->unk0, 1);
         var_r27 = HuDataSelHeapReadNum(lbl_1_data_20[GWPlayerCfg[var_r28].character], MEMORY_DEFAULT_NUM, HEAP_DATA);
         temp_r30->unk2 = Hu3DModelCreate(var_r27);
+        NextOSM412ReflectionModel(temp_r30->unk2);
         Hu3DModelScaleSet(temp_r30->unk2, 1.0f, -1.0f, 1.0f);
         Hu3DModelAttrSet(temp_r30->unk2, HU3D_ATTR_CULL_FRONT);
         Hu3DModelLayerSet(temp_r30->unk2, 0);
@@ -446,6 +500,7 @@ void fn_1_8BC(void)
         Hu3DModelShadowSet(var_r29);
         Hu3DModelShadowDispOff(var_r29);
         temp_r30->unk8 = var_r29 = Hu3DModelLink(var_r29);
+        NextOSM412ReflectionModel(temp_r30->unk8);
         Hu3DModelLayerSet(var_r29, 0);
         Hu3DModelAttrSet(var_r29, HU3D_MOTATTR_LOOP);
         Hu3DModelAttrSet(var_r29, HU3D_ATTR_DISPOFF | HU3D_ATTR_CULL_FRONT);
@@ -458,7 +513,7 @@ void fn_1_8BC(void)
         var_r23->user_data = temp_r30;
     }
     var_r21 = HuSprAnimRead(HuDataReadNum(DATA_MAKE_NUM(DATADIR_M412, 0x1E), MEMORY_DEFAULT_NUM));
-    var_r29 = Hu3DParticleCreate(var_r21, 0x100);
+    var_r29 = Hu3DParticleCreate(var_r21, NextOSM412ParticleCount(0x100));
     Hu3DModelPosSet(var_r29, 0.0f, 0.0f, 0.0f);
     Hu3DModelScaleSet(var_r29, 1.0f, 1.0f, 1.0f);
     Hu3DModelLayerSet(var_r29, 4);
@@ -466,7 +521,7 @@ void fn_1_8BC(void)
     Hu3DParticleScaleSet(var_r29, 0.0f);
     Hu3DParticleHookSet(var_r29, fn_1_A01C);
     var_r21 = HuSprAnimRead(HuDataReadNum(DATA_MAKE_NUM(DATADIR_EFFECT, 0x03), MEMORY_DEFAULT_NUM));
-    var_r29 = Hu3DParticleCreate(var_r21, 0x40);
+    var_r29 = Hu3DParticleCreate(var_r21, NextOSM412ParticleCount(0x40));
     Hu3DModelPosSet(var_r29, 0.0f, 0.0f, 0.0f);
     Hu3DModelScaleSet(var_r29, 1.0f, 1.0f, 1.0f);
     Hu3DModelLayerSet(var_r29, 4);

@@ -256,7 +256,8 @@ namespace {
                                           .getValue =
                                               [&var, option = props.option] {
                                                   if constexpr (std::is_same_v<T, float>) {
-                                                      return format_graphics_setting_value(option, float_setting_percent(var));
+                                                      return format_graphics_setting_value(
+                                                          option, graphics_float_carousel_units(option, var.getValue()));
                                                   }
                                                   else {
                                                       return format_graphics_setting_value(option, static_cast<int>(var.getValue()));
@@ -484,7 +485,8 @@ SettingsWindow::SettingsWindow(bool prelaunch)
                 .title = "Internal Resolution",
                 .helpText = kInternalResolutionHelpText,
                 .valueMin = 0,
-                .valueMax = 12,
+                // Quarter-multiplier units: 0 = Auto, 1 = 0.25x, ... 48 = 12x.
+                .valueMax = 48,
                 .defaultValue = 0,
             },
             mPrelaunch);

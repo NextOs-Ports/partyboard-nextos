@@ -36,8 +36,19 @@ typedef struct M425DllUnkStruct4 {
     float unk_30;
     s32 unk_34;
     s32 unk_38;
-    s32 unk_3C[5];
-    s32 unk_50;
+    /*
+     * The original layout aliases the sixth contact slot at offset 0x50.
+     * Several update loops intentionally address unk_3C[5], while other code
+     * names that same word unk_50. Express the alias so optimized PC builds
+     * do not treat the sixth access as out-of-bounds undefined behavior.
+     */
+    union {
+        s32 unk_3C[6];
+        struct {
+            s32 unk_3C_named[5];
+            s32 unk_50;
+        };
+    };
     float unk_54[6];
     s32 unk_6C[6];
     s32 unk_84[6];
@@ -2077,7 +2088,7 @@ void fn_1_101C4(HU3DMODEL *var_r29, Mtx var_r28)
 {
     Mtx sp50;
     ROMtx sp20;
-    GXColor sp1C;
+    GXColor sp1C = { 0, 0, 0, 0 };
     M425DllUnkStruct4 *var_r31;
     s32 var_r30;
     s16 var_r27;

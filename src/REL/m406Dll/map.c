@@ -12,6 +12,36 @@
 #include <string.h>
 #endif
 
+#ifdef TARGET_PC
+#include <stdlib.h>
+
+static s16 NextOSM406AvalancheParticleCount(s16 originalCount)
+{
+    static s32 divisor = -1;
+    s32 reducedCount;
+
+    if (divisor < 0) {
+        const char *value = getenv("PARTYBOARD_AVALANCHE_PARTICLE_DIVISOR");
+        divisor = value != NULL ? (s32)strtol(value, NULL, 10) : 1;
+        if (divisor < 1) {
+            divisor = 1;
+        }
+        if (divisor > 8) {
+            divisor = 8;
+        }
+        OSReport("[perf] Avalanche particle divisor=%d\n", divisor);
+    }
+
+    reducedCount = originalCount / divisor;
+    if (reducedCount < 0x100) {
+        reducedCount = 0x100;
+    }
+    return (s16)reducedCount;
+}
+#else
+#define NextOSM406AvalancheParticleCount(count) (count)
+#endif
+
 typedef struct UnkM406Struct {
     /* 0x00 */ u8 unk_00;
     /* 0x01 */ u8 unk_01;
@@ -1658,7 +1688,7 @@ void fn_1_6F24(void)
     memset(var_r31, 0, sizeof(UnkM406Struct10));
     var_r28 = HuSprAnimRead(HuDataReadNum(DATA_MAKE_NUM(DATADIR_M406, 63), MEMORY_DEFAULT_NUM));
     var_r31->unk_08 = var_r28;
-    var_r31->unk_00 = sp8 = fn_1_B474(var_r28, 0x800);
+    var_r31->unk_00 = sp8 = fn_1_B474(var_r28, NextOSM406AvalancheParticleCount(0x800));
     Hu3DModelLayerSet(var_r31->unk_00, 2);
     var_r31->unk_04 = 0;
     var_r29 = &Hu3DData[var_r31->unk_00];

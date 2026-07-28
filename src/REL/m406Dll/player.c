@@ -1921,8 +1921,12 @@ s32 fn_1_13C10(Vec *arg0, Vec *arg1)
     var_r21 = arg0->z / -10000.0f;
     if (var_r21 >= 6) {
 #ifdef NON_MATCHING
-        // TODO NON_MATCHING is this right?
-        return 1;
+        /*
+         * Past the final track segment there is no collision surface.  A
+         * successful return here leaves arg1 uninitialized, and the caller
+         * immediately reflects player velocity through that garbage normal.
+         */
+        return 0;
 #else
         return;
 #endif
@@ -1932,7 +1936,7 @@ s32 fn_1_13C10(Vec *arg0, Vec *arg1)
     var_r27 = var_r19->hsf->root;
     if (var_r27->type != 2) {
 #ifdef NON_MATCHING
-        return 1;
+        return 0;
 #else
         return;
 #endif

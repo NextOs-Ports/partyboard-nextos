@@ -1,5 +1,6 @@
 #include <dolphin.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <types.h>
 
@@ -424,9 +425,21 @@ void GXResetWriteGatherPipe(void)
 // Hudson
 void HuDvdErrDispInit(GXRenderModeObj *rmode, void *xfb1, void *xfb2) { }
 
-// msm functions provided by src/msm/*.c. GC AI (unused on PC) + AR helpers aurora
-// doesn't implement are stubbed here.
-AIDCallback AIRegisterDMACallback(AIDCallback callback) { return NULL; }
+// msm functions provided by src/msm/*.c. On PC, preserve the GameCube AI callback
+// chain: MusyX registers salCallback first, then MSM wraps it with msmSysServer.
+// The SDL pull backend triggers this callback once per emulated DMA buffer.
+static _Atomic(AIDCallback) sAIDCallback = ATOMIC_VAR_INIT(NULL);
+AIDCallback AIRegisterDMACallback(AIDCallback callback)
+{
+    return atomic_exchange_explicit(&sAIDCallback, callback, memory_order_acq_rel);
+}
+void AITriggerDMACallback(void)
+{
+    AIDCallback callback = atomic_load_explicit(&sAIDCallback, memory_order_acquire);
+    if (callback != NULL) {
+        callback();
+    }
+}
 void AIInitDMA(u32 a, u32 b) { (void)a; (void)b; }
 void AIStartDMA(void) {}
 void AIStopDMA(void) {}

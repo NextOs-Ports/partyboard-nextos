@@ -4,9 +4,361 @@
 #include "msm/msmmus.h"
 #include "msm/msmse.h"
 #include "msm/msmstream.h"
+#include "musyx/seq.h"
+#include "musyx/stream.h"
 #include "musyx/synthdata.h"
+#include "musyx/hardware.h"
+
+#include <stdint.h>
+#include <string.h>
 
 static MSM_SYS sys;
+
+typedef struct MSMRawSDir_s {
+    u16 id;
+    u16 refCnt;
+    u32 offset;
+    u32 addr;
+    SAMPLE_HEADER header;
+    u32 extraData;
+} MSM_RAW_SDIR;
+
+_Static_assert(sizeof(MSM_RAW_SDIR) == 0x20, "unexpected on-disc SDIR layout");
+
+static BOOL msmSysRangeValid(u32 offset, u32 size, u32 limit)
+{
+    return offset <= limit && size <= limit - offset;
+}
+
+static void msmSysSwapRefList(u8 *project, u32 projectSize, u32 offset)
+{
+    u16 *entry;
+    u16 value;
+    u32 pos;
+
+    /* An offset of zero is the on-disc representation of an absent list. */
+    if (offset == 0 || !msmSysRangeValid(offset, sizeof(u16), projectSize)) {
+        return;
+    }
+    pos = offset;
+    while (msmSysRangeValid(pos, sizeof(u16), projectSize)) {
+        entry = (u16 *) (project + pos);
+        value = __builtin_bswap16(*entry);
+        *entry = value;
+        if (value == 0xFFFF) {
+            return;
+        }
+        pos += sizeof(u16);
+    }
+}
+
+static void msmSysSwapPageTable(u8 *project, u32 projectSize, u32 offset)
+{
+    PAGE *page;
+
+    if (offset == 0) {
+        return;
+    }
+    while (msmSysRangeValid(offset, sizeof(PAGE), projectSize)) {
+        page = (PAGE *) (project + offset);
+        page->macro = __builtin_bswap16(page->macro);
+        if (page->index == 0xFF) {
+            return;
+        }
+        offset += sizeof(PAGE);
+    }
+}
+
+static void msmSysSwapMidiSetup(u8 *project, u32 projectSize, u32 offset)
+{
+    MIDISETUP *setup;
+
+    if (offset == 0) {
+        return;
+    }
+    while (msmSysRangeValid(offset, sizeof(MIDISETUP), projectSize)) {
+        setup = (MIDISETUP *) (project + offset);
+        setup->songId = __builtin_bswap16(setup->songId);
+        setup->reserved = __builtin_bswap16(setup->reserved);
+        if (setup->songId == 0xFFFF) {
+            return;
+        }
+        offset += sizeof(MIDISETUP);
+    }
+}
+
+static void msmSysSwapFxTable(u8 *project, u32 projectSize, u32 offset)
+{
+    FX_DATA *data;
+    u16 count;
+    u32 i;
+
+    if (offset == 0 || !msmSysRangeValid(offset, sizeof(u16) * 2, projectSize)) {
+        return;
+    }
+    data = (FX_DATA *) (project + offset);
+    count = __builtin_bswap16(data->num);
+    data->num = count;
+    data->reserverd = __builtin_bswap16(data->reserverd);
+    if (count > (projectSize - offset - 4) / sizeof(FX_TAB)) {
+        count = (projectSize - offset - 4) / sizeof(FX_TAB);
+    }
+    for (i = 0; i < count; i++) {
+        data->fx[i].id = __builtin_bswap16(data->fx[i].id);
+        data->fx[i].macro = __builtin_bswap16(data->fx[i].macro);
+    }
+}
+
+static BOOL msmSysSwapProject(u8 *project, u32 projectSize)
+{
+    GROUP_DATA *group;
+    u32 next;
+    u32 offset;
+    u32 guard;
+
+    offset = 0;
+    guard = 0;
+    while (msmSysRangeValid(offset, sizeof(u32), projectSize) && guard++ < 256) {
+        group = (GROUP_DATA *) (project + offset);
+        next = __builtin_bswap32(group->nextOff);
+        group->nextOff = next;
+        if (next == 0xFFFFFFFF) {
+            return TRUE;
+        }
+        /*
+         * A regular project entry is a complete GROUP_DATA, while the final
+         * list sentinel is only a four-byte nextOff word.
+         */
+        if (!msmSysRangeValid(offset, sizeof(GROUP_DATA), projectSize)) {
+            return FALSE;
+        }
+
+        group->id = __builtin_bswap16(group->id);
+        group->type = __builtin_bswap16(group->type);
+        group->macroOff = __builtin_bswap32(group->macroOff);
+        group->sampleOff = __builtin_bswap32(group->sampleOff);
+        group->curveOff = __builtin_bswap32(group->curveOff);
+        group->keymapOff = __builtin_bswap32(group->keymapOff);
+        group->layerOff = __builtin_bswap32(group->layerOff);
+        group->data.song.normpageOff = __builtin_bswap32(group->data.song.normpageOff);
+        group->data.song.drumpageOff = __builtin_bswap32(group->data.song.drumpageOff);
+        group->data.song.midiSetupOff = __builtin_bswap32(group->data.song.midiSetupOff);
+
+        msmSysSwapRefList(project, projectSize, group->macroOff);
+        msmSysSwapRefList(project, projectSize, group->sampleOff);
+        msmSysSwapRefList(project, projectSize, group->curveOff);
+        msmSysSwapRefList(project, projectSize, group->keymapOff);
+        msmSysSwapRefList(project, projectSize, group->layerOff);
+        if (group->type == 0) {
+            msmSysSwapPageTable(project, projectSize, group->data.song.normpageOff);
+            msmSysSwapPageTable(project, projectSize, group->data.song.drumpageOff);
+            msmSysSwapMidiSetup(project, projectSize, group->data.song.midiSetupOff);
+        } else if (group->type == 1) {
+            msmSysSwapFxTable(project, projectSize, group->data.fx.tableOff);
+        }
+
+        if (next == 0 || !msmSysRangeValid(next, sizeof(u32), projectSize)) {
+            return FALSE;
+        }
+        offset = next;
+    }
+    return FALSE;
+}
+
+enum {
+    MSM_POOL_MACRO,
+    MSM_POOL_CURVE,
+    MSM_POOL_KEYMAP,
+    MSM_POOL_LAYER,
+};
+
+static BOOL msmSysSwapPoolChain(u8 *pool, u32 poolSize, u32 offset, s32 kind)
+{
+    MEM_DATA *node;
+    u32 dataSize;
+    u32 i;
+    u32 next;
+
+    /*
+     * Zero means that this pool type is absent.  Treating it as a node would
+     * reinterpret and mutate the POOL_DATA header itself.
+     */
+    if (offset == 0) {
+        return TRUE;
+    }
+    while (msmSysRangeValid(offset, sizeof(u32), poolSize)) {
+        node = (MEM_DATA *) (pool + offset);
+        next = __builtin_bswap32(node->nextOff);
+        node->nextOff = next;
+        if (next == 0xFFFFFFFF) {
+            return TRUE;
+        }
+        /* Like project lists, a pool chain may end with only a u32 sentinel. */
+        if (!msmSysRangeValid(offset, 8, poolSize)) {
+            return FALSE;
+        }
+        if (next < 8 || !msmSysRangeValid(offset, next, poolSize)) {
+            return FALSE;
+        }
+        node->id = __builtin_bswap16(node->id);
+        node->reserved = __builtin_bswap16(node->reserved);
+        dataSize = next - 8;
+        if (kind == MSM_POOL_MACRO) {
+            u32 *word = (u32 *) &node->data;
+            for (i = 0; i < dataSize / sizeof(u32); i++) {
+                word[i] = __builtin_bswap32(word[i]);
+            }
+        } else if (kind == MSM_POOL_KEYMAP) {
+            KEYMAP *map = (KEYMAP *) &node->data;
+            for (i = 0; i < dataSize / sizeof(KEYMAP); i++) {
+                map[i].id = __builtin_bswap16(map[i].id);
+                map[i].prioOffset = __builtin_bswap16(map[i].prioOffset);
+            }
+        } else if (kind == MSM_POOL_LAYER) {
+            u32 count = __builtin_bswap32(node->data.layer.num);
+            LAYER *layer = node->data.layer.entry;
+            u32 maxCount = dataSize >= sizeof(u32) ? (dataSize - sizeof(u32)) / sizeof(LAYER) : 0;
+            node->data.layer.num = count;
+            if (count > maxCount) {
+                count = maxCount;
+            }
+            for (i = 0; i < count; i++) {
+                layer[i].id = __builtin_bswap16(layer[i].id);
+                layer[i].prioOffset = __builtin_bswap16(layer[i].prioOffset);
+            }
+        }
+        offset += next;
+    }
+    return FALSE;
+}
+
+static BOOL msmSysSwapPool(u8 *pool, u32 poolSize)
+{
+    POOL_DATA *data;
+
+    if (poolSize < sizeof(POOL_DATA)) {
+        return FALSE;
+    }
+    data = (POOL_DATA *) pool;
+    data->macroOff = __builtin_bswap32(data->macroOff);
+    data->curveOff = __builtin_bswap32(data->curveOff);
+    data->keymapOff = __builtin_bswap32(data->keymapOff);
+    data->layerOff = __builtin_bswap32(data->layerOff);
+    return msmSysSwapPoolChain(pool, poolSize, data->macroOff, MSM_POOL_MACRO)
+        && msmSysSwapPoolChain(pool, poolSize, data->curveOff, MSM_POOL_CURVE)
+        && msmSysSwapPoolChain(pool, poolSize, data->keymapOff, MSM_POOL_KEYMAP)
+        && msmSysSwapPoolChain(pool, poolSize, data->layerOff, MSM_POOL_LAYER);
+}
+
+static void msmSysSwapAdpcmInfo(SNDADPCMinfo *info)
+{
+    u32 i;
+
+    info->numCoef = __builtin_bswap16(info->numCoef);
+    info->loopY0 = __builtin_bswap16(info->loopY0);
+    info->loopY1 = __builtin_bswap16(info->loopY1);
+    for (i = 0; i < 8; i++) {
+        info->coefTab[i][0] = __builtin_bswap16(info->coefTab[i][0]);
+        info->coefTab[i][1] = __builtin_bswap16(info->coefTab[i][1]);
+    }
+}
+
+static SDIR_DATA *msmSysConvertSDir(const u8 *rawData, u32 rawSize)
+{
+    const MSM_RAW_SDIR *raw;
+    SDIR_DATA *host;
+    u32 count;
+    u32 extraOffset;
+    u32 hostEntrySize;
+    u32 i;
+    u32 rawEntrySize;
+    u32 totalSize;
+
+    count = 0;
+    while (msmSysRangeValid(count * sizeof(MSM_RAW_SDIR), sizeof(MSM_RAW_SDIR), rawSize)) {
+        raw = (const MSM_RAW_SDIR *) (rawData + count * sizeof(MSM_RAW_SDIR));
+        count++;
+        if (__builtin_bswap16(raw->id) == 0xFFFF) {
+            break;
+        }
+    }
+    if (count == 0 || count * sizeof(MSM_RAW_SDIR) > rawSize
+        || __builtin_bswap16(((const MSM_RAW_SDIR *) rawData)[count - 1].id) != 0xFFFF) {
+        return NULL;
+    }
+
+    rawEntrySize = count * sizeof(MSM_RAW_SDIR);
+    hostEntrySize = count * sizeof(SDIR_DATA);
+    totalSize = hostEntrySize + rawSize - rawEntrySize;
+    host = msmMemAlloc(totalSize);
+    if (host == NULL) {
+        return NULL;
+    }
+    memset(host, 0, hostEntrySize);
+    memcpy((u8 *) host + hostEntrySize, rawData + rawEntrySize, rawSize - rawEntrySize);
+
+    for (i = 0; i < count; i++) {
+        raw = (const MSM_RAW_SDIR *) (rawData + i * sizeof(MSM_RAW_SDIR));
+        host[i].id = __builtin_bswap16(raw->id);
+        host[i].ref_cnt = __builtin_bswap16(raw->refCnt);
+        host[i].offset = __builtin_bswap32(raw->offset);
+        host[i].addr = (void *) (uintptr_t) __builtin_bswap32(raw->addr);
+        host[i].header.info = __builtin_bswap32(raw->header.info);
+        host[i].header.length = __builtin_bswap32(raw->header.length);
+        host[i].header.loopOffset = __builtin_bswap32(raw->header.loopOffset);
+        host[i].header.loopLength = __builtin_bswap32(raw->header.loopLength);
+        extraOffset = __builtin_bswap32(raw->extraData);
+        if (extraOffset >= rawEntrySize && extraOffset + sizeof(SNDADPCMinfo) <= rawSize) {
+            host[i].extraData = hostEntrySize + extraOffset - rawEntrySize;
+            msmSysSwapAdpcmInfo((SNDADPCMinfo *) ((u8 *) host + host[i].extraData));
+        } else {
+            host[i].extraData = 0;
+        }
+    }
+    return host;
+}
+
+static s32 msmSysPrepareGroup(MSM_GRP_HEAD *group, u32 dataSize, s32 groupId, void **sdirHost)
+{
+    u8 *base;
+    u32 poolOfs;
+    u32 projOfs;
+    u32 sdirOfs;
+    u32 sngOfs;
+
+    base = (u8 *) group;
+    poolOfs = __builtin_bswap32(group->poolOfs);
+    projOfs = __builtin_bswap32(group->projOfs);
+    sdirOfs = __builtin_bswap32(group->sdirOfs);
+    sngOfs = __builtin_bswap32(group->sngOfs);
+    if (!(sizeof(MSM_GRP_HEAD) <= poolOfs && poolOfs < projOfs && projOfs < sdirOfs
+          && sdirOfs < sngOfs && sngOfs <= dataSize)) {
+        return MSM_ERR_INVALIDFILE;
+    }
+
+    group->poolOfs = poolOfs;
+    group->projOfs = projOfs;
+    group->sdirOfs = sdirOfs;
+    group->sngOfs = sngOfs;
+    if (!msmSysSwapPool(base + poolOfs, projOfs - poolOfs)
+        || !msmSysSwapProject(base + projOfs, sdirOfs - projOfs)) {
+        return MSM_ERR_INVALIDFILE;
+    }
+    *sdirHost = msmSysConvertSDir(base + sdirOfs, sngOfs - sdirOfs);
+    if (*sdirHost == NULL) {
+        return MSM_ERR_OUTOFMEM;
+    }
+    msmMusPrepareGroup(group, dataSize, groupId);
+    return 0;
+}
+
+static void msmSysFreeStackSDir(MSM_GRP_STACK *group)
+{
+    if (group->sdirHost != NULL) {
+        msmMemFree(group->sdirHost);
+        group->sdirHost = NULL;
+    }
+}
 
 static void msmSysServer(void)
 {
@@ -18,7 +370,9 @@ static void msmSysServer(void)
             msmStreamPeriodicProc();
         }
     }
-    sys.oldAIDCallback();
+    if (sys.oldAIDCallback != NULL) {
+        sys.oldAIDCallback();
+    }
 }
 
 static s32 msmSysSetAuxParam(s32 auxA, s32 auxB)
@@ -105,6 +459,7 @@ static s32 msmSysLoadBaseGroup(void *buf)
 {
     DVDFileInfo file;
     s32 i;
+    s32 result;
     MSM_GRP_HEAD *grpData;
     MSM_GRP_INFO *grpInfo;
 
@@ -122,26 +477,14 @@ static s32 msmSysLoadBaseGroup(void *buf)
             msmFioClose(&file);
             return MSM_ERR_READFAIL;
         }
-        /* byte-swap MSM_GRP_HEAD offsets (big-endian) + fix 64-bit pointer arithmetic. */
-        grpData->poolOfs = __builtin_bswap32(grpData->poolOfs);
-        grpData->projOfs = __builtin_bswap32(grpData->projOfs);
-        grpData->sdirOfs = __builtin_bswap32(grpData->sdirOfs);
-        grpData->sngOfs = __builtin_bswap32(grpData->sngOfs);
-        /* byte-swap GROUP_DATA linked list (big-endian -> LE) before sndPushGroup.
-         * GROUP_DATA is 0x28 bytes, all u32/u16 — 10 u32 words, blanket-swap works. */
-        {
-            u8* prj = (u8*)((uintptr_t)grpData->projOfs + (uintptr_t)grpData);
-            GROUP_DATA* g = (GROUP_DATA*)prj;
-            int guard = 0;
-            while (guard++ < 256) {
-                u32* wp = (u32*)g;
-                for (int wi = 0; wi < 10; wi++) wp[wi] = __builtin_bswap32(wp[wi]);
-                if (g->nextOff == 0xFFFFFFFF) break;
-                g = (GROUP_DATA*)(prj + g->nextOff);
-            }
+        result = msmSysPrepareGroup(grpData, grpInfo->dataSize, sys.info->baseGrp[i],
+            &sys.grpSdir[i]);
+        if (result != 0) {
+            msmFioClose(&file);
+            return result;
         }
         if (!sndPushGroup((void*) ((uintptr_t)grpData->projOfs + (uintptr_t) grpData), grpInfo->gid, buf,
-            (void*) ((uintptr_t)grpData->sdirOfs + (uintptr_t) grpData), (void*) ((uintptr_t)grpData->poolOfs + (uintptr_t) grpData)))
+            sys.grpSdir[i], (void*) ((uintptr_t)grpData->poolOfs + (uintptr_t) grpData)))
         {
             msmFioClose(&file);
             return MSM_ERR_GRP_FAILPUSH;
@@ -240,13 +583,15 @@ s32 msmSysGroupInit(DVDFileInfo *file)
         stack = &sys.grpStackA[i];
         stack->grpId = stack->baseGrpF = 0;
         stack->num = 0;
-        stack->buf = (void*) ((u32) sys.grpBufA + sys.info->grpBufSizeA * i);
+        stack->buf = (void*) ((uintptr_t) sys.grpBufA + sys.info->grpBufSizeA * i);
+        stack->sdirHost = NULL;
     }
     for (i = 0; i < sys.grpStackBMax; i++) {
         stack = &sys.grpStackB[i];
         stack->grpId = stack->baseGrpF = 0;
         stack->num = 0;
-        stack->buf = (void*) ((u32) sys.grpBufB + sys.info->grpBufSizeB * i);
+        stack->buf = (void*) ((uintptr_t) sys.grpBufB + sys.info->grpBufSizeB * i);
+        stack->sdirHost = NULL;
     }
     sys.sampSize = 0;
     for (i = 0; i < sys.baseGrpNum; i++) {
@@ -273,17 +618,15 @@ s32 msmSysGroupInit(DVDFileInfo *file)
 
 void msmSysIrqDisable(void)
 {
-    if (sys.irqDepth++ == 0) {
-        sys.irqState = OSDisableInterrupts();
-    }
+    hwIRQEnterCritical();
+    sys.irqDepth++;
 }
 
 void msmSysIrqEnable(void)
 {
     if (sys.irqDepth != 0) {
-        if (--sys.irqDepth == 0) {
-            OSRestoreInterrupts(sys.irqState);
-        }
+        sys.irqDepth--;
+        hwIRQLeaveCritical();
     }
 }
 
@@ -449,6 +792,7 @@ s32 msmSysDelGroupAll(void)
         if (grp->num != 0 && grp->baseGrpF == 0) {
             grp->num = 0;
             sndPopGroup();
+            msmSysFreeStackSDir(grp);
             sys.aramP -= sys.grpInfo[grp->grpId].sampSize;
             sys.grpStackBDepth--;
         }
@@ -458,6 +802,7 @@ s32 msmSysDelGroupAll(void)
         if (grp->num != 0 && grp->baseGrpF == 0) {
             grp->num = 0;
             sndPopGroup();
+            msmSysFreeStackSDir(grp);
             sys.aramP -= sys.grpInfo[grp->grpId].sampSize;
             sys.grpStackADepth--;
         }
@@ -510,6 +855,7 @@ s32 msmSysDelGroupBase(s32 grpNum)
                 sys.grpStackBOfs--;
             }
             sndPopGroup();
+            msmSysFreeStackSDir(grp);
             sys.aramP -= sys.grpInfo[grp->grpId].sampSize;
             grp->baseGrpF = 0;
             grp->num = 0;
@@ -519,6 +865,7 @@ s32 msmSysDelGroupBase(s32 grpNum)
             grp = &sys.grpStackA[i];
             if (grp->num != 0) {
                 sndPopGroup();
+                msmSysFreeStackSDir(grp);
                 sys.aramP -= sys.grpInfo[grp->grpId].sampSize;
                 grp->baseGrpF = 0;
                 grp->num = 0;
@@ -528,6 +875,7 @@ s32 msmSysDelGroupBase(s32 grpNum)
             grp = &sys.grpStackB[i];
             if (grp->num != 0) {
                 sndPopGroup();
+                msmSysFreeStackSDir(grp);
                 sys.aramP -= sys.grpInfo[grp->grpId].sampSize;
                 grp->baseGrpF = 0;
                 grp->num = 0;
@@ -543,10 +891,12 @@ s32 msmSysDelGroupBase(s32 grpNum)
 
 static s32 msmSysPushGroup(DVDFileInfo *file, void *buf, MSM_GRP_STACK *grp, s32 grpId)
 {
+    s32 result;
     MSM_GRP_INFO *grpInfo;
     MSM_GRP_HEAD *grpBuf;
 
     grpInfo = &sys.grpInfo[grpId];
+    msmSysFreeStackSDir(grp);
     if (msmFioRead(file, grp->buf, grpInfo->dataSize, grpInfo->dataOfs + sys.header->grpDataOfs) < 0) {
         return MSM_ERR_READFAIL;
     }
@@ -554,9 +904,14 @@ static s32 msmSysPushGroup(DVDFileInfo *file, void *buf, MSM_GRP_STACK *grp, s32
         return MSM_ERR_READFAIL;
     }
     grpBuf = grp->buf;
-    if (!sndPushGroup((void*) (grpBuf->projOfs + (u32) grpBuf), grpInfo->gid, buf,
-        (void*) (grpBuf->sdirOfs + (u32) grpBuf), (void*) (grpBuf->poolOfs + (u32) grpBuf)))
+    result = msmSysPrepareGroup(grpBuf, grpInfo->dataSize, grpId, &grp->sdirHost);
+    if (result != 0) {
+        return result;
+    }
+    if (!sndPushGroup((void*) ((uintptr_t)grpBuf + grpBuf->projOfs), grpInfo->gid, buf,
+        grp->sdirHost, (void*) ((uintptr_t)grpBuf + grpBuf->poolOfs)))
     {
+        msmSysFreeStackSDir(grp);
         return MSM_ERR_GRP_FAILPUSH;
     }
     sys.aramP += grpInfo->sampSize;
@@ -717,6 +1072,7 @@ static s32 msmSysLoadGroupSub(DVDFileInfo *file, s32 grpId, void *buf)
                     stackLevel = -(stackLevel + 1);
                     (*stackDepth)--;
                     sndPopGroup();
+                    msmSysFreeStackSDir(&grpStack[stackLevel]);
                     sys.aramP -= sys.grpInfo[grpStack[stackLevel].grpId].sampSize;
                     grpIdResult = grpStack[stackLevel].grpId;
                     grpStack[stackLevel].num = 0;
@@ -734,6 +1090,7 @@ static s32 msmSysLoadGroupSub(DVDFileInfo *file, s32 grpId, void *buf)
         stackLevel = -(stackLevel + 1);
         (*stackDepth)--;
         sndPopGroup();
+        msmSysFreeStackSDir(&grpStack[stackLevel]);
         sys.aramP -= sys.grpInfo[grpStack[stackLevel].grpId].sampSize;
         grpIdResult = grpStack[stackLevel].grpId;
     }
@@ -752,6 +1109,7 @@ static void msmSysPopGroup(s32 no)
     grp = &sys.grpStackB[no];
     if (grp->num != 0 && grp->baseGrpF == 0) {
         sndPopGroup();
+        msmSysFreeStackSDir(grp);
         sys.aramP -= sys.grpInfo[grp->grpId].sampSize;
     }
 }

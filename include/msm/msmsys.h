@@ -25,6 +25,7 @@ typedef struct MSMGrpWork_s {
     s8 baseGrpF;
     u32 num;
     void *buf;
+    void *sdirHost;
 } MSM_GRP_STACK;
 
 typedef struct MSMSys_s {
@@ -47,6 +48,7 @@ typedef struct MSMSys_s {
     MSM_GRP_SET *grpSet;
     s8 baseGrpNum;
     MSM_GRP_HEAD *grpData[15];
+    void *grpSdir[15];
     s8 grpStackAMax;
     u8 grpStackADepth;
     s8 grpStackAOfs;
@@ -78,6 +80,7 @@ s32 msmSysDelGroupAll(void);
 s32 msmSysDelGroupBase(s32 grpNum);
 s32 msmSysLoadGroupBase(s32 arg0, void *arg1);
 s32 msmSysLoadGroupSet(s32 arg0, void *arg1);
+s32 msmSysLoadGroup(s32 grpId, void *buf);
 void msmSysCheckInit(void);
 s32 msmSysInit(MSM_INIT *init, MSM_ARAM *aram);
 

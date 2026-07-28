@@ -274,13 +274,22 @@ Check the firmware's SDL2 before assuming this build applies to a device:
 strings /usr/lib/libSDL2-2.0.so.0 | grep -i sdl2-compat
 ```
 
-If that matches, the device has no real SDL2 — it has **sdl2-compat**, which
-translates SDL2 calls back into SDL3 and `dlopen`s `libSDL3.so.0`. The shim then
-closes a loop (our SDL3 → shim → sdl2-compat → our SDL3) and the process dies of
-stack exhaustion. There is no way around it: the premise of the shim is that
-something else owns the screen, and under sdl2-compat nothing does. Those
-devices want SDL3 with a native video driver instead, which is what the NextOS
-build already does.
+If that matches, the device's SDL2 is **sdl2-compat**: a real, working SDL2 that
+happens to be implemented on top of SDL3, which it loads with
+`dlopen("libSDL3.so.0")`. SDL2 programs run fine there — but this build is not
+one of them, because it ships its own `libSDL3.so.0`. The loader resolves that
+`dlopen` by SONAME and finds the copy already in the process: ours, whose video
+driver is the shim. So the call path closes a loop — our SDL3 → shim →
+sdl2-compat → our SDL3 — and the process dies of stack exhaustion.
+
+Read that finding the other way round and it is useful: sdl2-compat on a device
+proves the device already has a working SDL3 underneath. Linking against that
+one is simpler than the shim, and it uses the video driver the firmware already
+validated for its own hardware. Verified on NextOS Elite — with the bundled
+`libSDL3.so.0` removed, the port runs on `/usr/lib/libSDL3.so.0` (SDL 3.5.0,
+`mali` driver) at full speed with audio. The open question there is ABI drift on
+firmwares carrying an older SDL3, which is why the shipped package still bundles
+its own.
 
 This build also must not pin `SDL_AUDIODRIVER` — audio is delegated to the
 firmware SDL2, which already knows the device's output.
@@ -662,12 +671,21 @@ Confira a SDL2 da firmware antes de supor que esse build serve para um aparelho:
 strings /usr/lib/libSDL2-2.0.so.0 | grep -i sdl2-compat
 ```
 
-Se casar, o aparelho não tem SDL2 de verdade — tem **sdl2-compat**, que traduz
-chamadas SDL2 de volta para SDL3 e dá `dlopen` em `libSDL3.so.0`. Aí o shim
-fecha um ciclo (nossa SDL3 → shim → sdl2-compat → nossa SDL3) e o processo morre
-de pilha estourada. Não há como contornar: a premissa do shim é que outra coisa
-seja dona da tela, e sob o sdl2-compat não é. Esses aparelhos querem SDL3 com
-driver de vídeo nativo, que é exatamente o que o build do NextOS já faz.
+Se casar, a SDL2 do aparelho é o **sdl2-compat**: uma SDL2 real e funcional, só
+que implementada em cima da SDL3, que ela carrega com `dlopen("libSDL3.so.0")`.
+Programas SDL2 rodam normalmente ali — mas este build não é um deles, porque ele
+empacota a própria `libSDL3.so.0`. O loader resolve esse `dlopen` por SONAME e
+encontra a cópia que já está no processo: a nossa, cujo driver de vídeo é o
+shim. Aí o caminho fecha um ciclo — nossa SDL3 → shim → sdl2-compat → nossa
+SDL3 — e o processo morre de pilha estourada.
+
+Lida ao contrário, essa descoberta é útil: sdl2-compat num aparelho prova que
+ele já tem uma SDL3 funcional por baixo. Linkar contra ela é mais simples que o
+shim, e usa o driver de vídeo que a própria firmware já validou para o hardware
+dela. Verificado no NextOS Elite — removendo a `libSDL3.so.0` empacotada, o port
+roda na `/usr/lib/libSDL3.so.0` (SDL 3.5.0, driver `mali`) em velocidade cheia e
+com áudio. A dúvida em aberto é desvio de ABI em firmwares com SDL3 mais antiga,
+e é por isso que o pacote distribuído continua trazendo a própria.
 
 Esse build também não pode cravar `SDL_AUDIODRIVER` — o áudio é delegado à SDL2
 da firmware, que já conhece a saída do aparelho.

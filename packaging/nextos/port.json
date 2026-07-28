@@ -8,7 +8,7 @@
   "items_opt": null,
   "attr": {
     "title": "PartyBoard",
-    "desc": "Native Mario Party 4 reimplementation for NextOS AArch64, ported to Mali-450 OpenGL ES 2.0. Native boot to title screen and controls validated; audio is a known upstream gap.",
+    "desc": "Native Mario Party 4 reimplementation for NextOS AArch64 and Mali-450 OpenGL ES 2.0. Full boards and minigames, four-player controls, music, sound effects, saves and clean Select+Start exit.",
     "inst": "Place your supported Mario Party 4 (GMPE01) USA .rvz/.iso/.gcm image in partyboard/assets.",
     "genres": [
       "party",

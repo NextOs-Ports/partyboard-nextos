@@ -134,6 +134,14 @@ endif ()
 add_subdirectory(extern/aurora EXCLUDE_FROM_ALL)
 add_subdirectory(extern/musyx EXCLUDE_FROM_ALL)
 
+if (TARGET nod AND COMMAND corrosion_add_target_rustflags)
+    corrosion_add_target_rustflags(
+        nod
+        "--remap-path-prefix=${CMAKE_SOURCE_DIR}=PartyBoard"
+        "--remap-path-prefix=$ENV{HOME}=BuildHome"
+    )
+endif ()
+
 include(extern/aurora/cmake/AuroraCopyRuntimeDLLs.cmake)
 
 configure_file(${CMAKE_SOURCE_DIR}/version.h.in ${CMAKE_BINARY_DIR}/partyboard_version.h)

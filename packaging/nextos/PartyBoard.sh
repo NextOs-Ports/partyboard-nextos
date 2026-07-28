@@ -37,6 +37,17 @@ mkdir -p "$RUNTIME_DIR/home" "$RUNTIME_DIR/config" "$RUNTIME_DIR/cache" "$ASSETS
 cd "$GAMEDIR" || exit 1
 ulimit -c 0
 
+# Warm the driver-specific GL program cache on a fresh install. Aurora validates
+# its embedded Mali/GL fingerprint before using any binary and discards the
+# cache automatically when the firmware or driver differs.
+PROGRAM_CACHE_SEED="$GAMEDIR/initial_program_binary_cache.db"
+PROGRAM_CACHE_DIR="$RUNTIME_DIR/Party Board"
+PROGRAM_CACHE="$PROGRAM_CACHE_DIR/program_binary_cache.db"
+if [ -s "$PROGRAM_CACHE_SEED" ] && [ ! -s "$PROGRAM_CACHE" ]; then
+  mkdir -p "$PROGRAM_CACHE_DIR"
+  cp "$PROGRAM_CACHE_SEED" "$PROGRAM_CACHE"
+fi
+
 [ ! -s "$LOGFILE" ] || mv -f "$LOGFILE" "$GAMEDIR/log.prev.txt"
 : >"$LOGFILE"
 exec >>"$LOGFILE" 2>&1
@@ -61,6 +72,19 @@ if [ -z "$DVD_PATH" ]; then
 fi
 
 # Seed config.json so PartyBoard boots straight into the game (skip disc-select UI).
+PARTYBOARD_INTERNAL_SCALE="${PARTYBOARD_INTERNAL_SCALE:-0.50}"
+PARTYBOARD_SHADOW_DIVISOR="${PARTYBOARD_SHADOW_DIVISOR:-3}"
+PARTYBOARD_HEAVY_MINIGAME_SHADOW_DIVISOR="${PARTYBOARD_HEAVY_MINIGAME_SHADOW_DIVISOR:-8}"
+PARTYBOARD_AVALANCHE_PARTICLE_DIVISOR="${PARTYBOARD_AVALANCHE_PARTICLE_DIVISOR:-4}"
+PARTYBOARD_BLIZZARD_PARTICLE_DIVISOR="${PARTYBOARD_BLIZZARD_PARTICLE_DIVISOR:-2}"
+PARTYBOARD_HEAVY_MINIGAME_REFLECTIONS="${PARTYBOARD_HEAVY_MINIGAME_REFLECTIONS:-0}"
+PARTYBOARD_EXPERIMENTAL_AUDIO="${PARTYBOARD_EXPERIMENTAL_AUDIO:-1}"
+export PARTYBOARD_SHADOW_DIVISOR
+export PARTYBOARD_HEAVY_MINIGAME_SHADOW_DIVISOR
+export PARTYBOARD_AVALANCHE_PARTICLE_DIVISOR
+export PARTYBOARD_BLIZZARD_PARTICLE_DIVISOR
+export PARTYBOARD_HEAVY_MINIGAME_REFLECTIONS
+export PARTYBOARD_EXPERIMENTAL_AUDIO
 export HOME="$RUNTIME_DIR/home"
 export XDG_DATA_HOME="$RUNTIME_DIR"
 export XDG_CONFIG_HOME="$RUNTIME_DIR/config"
@@ -74,7 +98,8 @@ cat >"$CFG" <<EOF
     "backend.skipPreLaunchUI": true,
     "backend.isoVerification": 1,
     "video.enableFullscreen": true,
-    "video.enableVsync": false
+    "video.enableVsync": false,
+    "game.internalResolutionScale": $PARTYBOARD_INTERNAL_SCALE
 }
 EOF
 
@@ -85,6 +110,7 @@ export LD_PRELOAD="$SDL3_LIB${LD_PRELOAD:+:$LD_PRELOAD}"
 export SDL_VIDEODRIVER=mali
 export SDL_AUDIODRIVER=alsa
 export SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE="${SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE:-plughw:0,0}"
+export SDL_AUDIO_DEVICE_SAMPLE_FRAMES="${SDL_AUDIO_DEVICE_SAMPLE_FRAMES:-2048}"
 unset ALSA_CONFIG_PATH
 
 # Gamepad mapping: prefer PortMaster's, then the bundled Twin USB (PS2 adapter,
@@ -96,7 +122,9 @@ elif [ -z "${SDL_GAMECONTROLLERCONFIG:-}" ]; then
 fi
 
 echo "[partyboard] NextOS Mali-450 GLES2"
-echo "[partyboard] disc=$(basename "$DVD_PATH")"
+echo "[partyboard] disc=$(basename "$DVD_PATH") scale=$PARTYBOARD_INTERNAL_SCALE shadows=1/$PARTYBOARD_SHADOW_DIVISOR heavy=1/$PARTYBOARD_HEAVY_MINIGAME_SHADOW_DIVISOR"
+echo "[partyboard] heavy particles: Avalanche=1/$PARTYBOARD_AVALANCHE_PARTICLE_DIVISOR Blizzard=1/$PARTYBOARD_BLIZZARD_PARTICLE_DIVISOR reflections=$PARTYBOARD_HEAVY_MINIGAME_REFLECTIONS"
+echo "[partyboard] audio buffer=$SDL_AUDIO_DEVICE_SAMPLE_FRAMES frames"
 chmod +x "$BIN" 2>/dev/null || true
 command -v pm_platform_helper >/dev/null 2>&1 && pm_platform_helper "$BIN"
 

@@ -384,3 +384,45 @@ OU: byte-swap os payloads das sub-tabelas antes de passá-los às funções Inse
 → `msmSysInit` SUCEDE; ALSA open; pipeline completo; **voices=0** (sub-tabelas BE).
 
 O `DONE_PARTYBOARD` precisa: swap das sub-tabelas/engine + **ouvido** + play-test.
+
+## PERFORMANCE — sessão 2026-07-26 (decode-bound → +55% na cena pesada)
+
+Diagnóstico com instrumentação nova (linha `[fps]` ganhou `stall q/w/b` + `drain h/e/c/u`;
+`PARTYBOARD_PERF_SPLIT=1` liga o split por fase no main loop, via OSReport a cada 300 frames):
+- A cena pesada (demo de board no attract: ~1500 draws, 645-770KB vtx/frame, passes 1.3)
+  era **decode-bound na thread de gravação**: todo o custo está no `gx::fifo::drain()`
+  (chamado dentro de `aurora_end_frame`), não na GPU (stalls de present/queue = 0) nem na
+  lógica do jogo (0.3ms). Título é GPU-bound (15 passes de EFB copy) — bloqueia em
+  begin_frame esperando slot (aparece na fase "events" do split).
+
+Otimizações aplicadas (todas no extern/aurora, working tree):
+1. **Memo por-draw de pipeline/shader-info/bind-groups** (`push_native_gx_draw`):
+   novas flags `pipelineStateDirty`/`texStateDirty` no GXState; todos os handlers marcam
+   via `mark_dirty_all()/mark_dirty_tex()/mark_dirty_uniform()` (whitelist auditada:
+   matrizes XF/luzes/cores TEV/fog params/projeção/clear = uniform-only; texobj/tlut/
+   image regs = tex-only). Draws consecutivos que só mudaram uniforms reusam pipeline+
+   info+bindgroups inteiros; só-textura reusa config/info/pipeline e refaz bind groups.
+   Memo invalidado a cada process() (nunca cruza frame). Custo `c` caiu 17.6→7.6ms.
+2. **-mcpu=cortex-a53** no toolchain (CMAKE_*_FLAGS_INIT) — S905L é A53 in-order.
+3. **expand_native_vertex**: escrita em registro de pilha + 1 append por vértice
+   (antes: bounds-check por componente, ~220K appends/frame). `e` 11.5→6.8ms.
+4. **Hash one-shot**: FIFO de segmento único via XXH3 one-shot (sem estado streaming) e
+   layout-hash cacheado (memcmp dos descs + gerações de array). `h` 6.1→2.8ms.
+
+Resultado (mesma assinatura de cena, A/B):
+- Board demo: 22.3-23.7 fps → **36.1 fps** (42-45ms → 27.7ms/frame).
+- Logos Nintendo/Hudson, título e board demo visualmente PERFEITOS (PNG conferidos).
+- Sem crash em runs de 100-210s; `[geom-cache]`/ALSA/áudio inalterados.
+
+Pendências de perf mapeadas (próxima sessão):
+- `c` restante 7.6ms = misses do memo (trocas reais de material/textura); candidato:
+  memo de bind groups por assinatura de textura.
+- `e` 6.8ms = expansão real dos ~305 draws/frame animados (personagens; bytes mudam
+  toda frame, cache não pega). Candidato: NEON/especialização por layout.
+- Estrutural: mover o drain pra thread própria (pipeline com a lógica) — refactor grande.
+- Validar minigames REAIS com controle (NextOS) — as otimizações são no caminho comum
+  de draw, valem pra minigame igual; medir com a linha [fps] nova.
+
+Deploy: libdol.so novo no device .86; backup da base do dia em
+`libdol.pre-perfsplit-baseline.so`. Build local: `build/nextos-gles2` (reconfigurado com
+-mcpu; `configure-nextos.sh` reproduz). Instrumentação fica no build (custo ~0.3ms).

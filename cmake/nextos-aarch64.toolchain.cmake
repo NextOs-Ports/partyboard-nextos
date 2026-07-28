@@ -1,26 +1,48 @@
 # NextOS / Mali-450 (AArch64) cross toolchain for PartyBoard.
-# Host cross sysroot is glibc 2.43, identical to the NextOS Elite target device,
-# so the produced binaries run natively without a compat layer.
-# Mirrors dusklight-nextos/cmake/nextos-aarch64-gcc10.toolchain.cmake but uses
-# the host's aarch64-linux-gnu-gcc (GCC 16) since gcc-10 is not installed here;
-# the glibc 2.43 match (not the gcc major) is what governs runtime compatibility.
+# Releases must use the compiler and sysroot produced by the current NextOS
+# build tree.  Point PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT (or the environment
+# variable NEXTOS_TOOLCHAIN_ROOT) at that tree's `toolchain` directory.
 
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
-set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
-set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
-set(CMAKE_AR aarch64-linux-gnu-ar)
-set(CMAKE_RANLIB aarch64-linux-gnu-ranlib)
-set(CMAKE_STRIP aarch64-linux-gnu-strip)
+if(NOT PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT AND DEFINED ENV{NEXTOS_TOOLCHAIN_ROOT})
+  set(PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT "$ENV{NEXTOS_TOOLCHAIN_ROOT}")
+endif()
+if(NOT PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT)
+  message(FATAL_ERROR
+    "Set PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT to the current NextOS toolchain directory")
+endif()
+file(REAL_PATH "${PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT}" PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT)
 
-# Mali fbdev link libs (libGLESv2/libEGL) live in the staging sysroot; the rest
-# (libc, etc.) come from the host aarch64 cross sysroot (glibc 2.43).
-set(PARTYBOARD_NEXTOS_SYSROOT ${CMAKE_CURRENT_LIST_DIR}/../build/sysroot)
-set(CMAKE_FIND_ROOT_PATH ${PARTYBOARD_NEXTOS_SYSROOT} /usr/aarch64-linux-gnu /usr/lib/aarch64-linux-gnu)
+set(PARTYBOARD_NEXTOS_TRIPLE aarch64-libreelec-linux-gnu)
+set(CMAKE_C_COMPILER
+  "${PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT}/bin/${PARTYBOARD_NEXTOS_TRIPLE}-gcc")
+set(CMAKE_CXX_COMPILER
+  "${PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT}/bin/${PARTYBOARD_NEXTOS_TRIPLE}-g++")
+set(CMAKE_AR
+  "${PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT}/bin/${PARTYBOARD_NEXTOS_TRIPLE}-ar")
+set(CMAKE_RANLIB
+  "${PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT}/bin/${PARTYBOARD_NEXTOS_TRIPLE}-ranlib")
+set(CMAKE_STRIP
+  "${PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT}/bin/${PARTYBOARD_NEXTOS_TRIPLE}-strip")
+set(CMAKE_READELF
+  "${PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT}/bin/${PARTYBOARD_NEXTOS_TRIPLE}-readelf")
+
+set(CMAKE_SYSROOT
+  "${PARTYBOARD_NEXTOS_TOOLCHAIN_ROOT}/${PARTYBOARD_NEXTOS_TRIPLE}/sysroot")
+set(CMAKE_SKIP_RPATH TRUE CACHE BOOL "Do not embed host build paths in release binaries" FORCE)
+
+# The small staging sysroot supplies the Mali fbdev link stubs and Khronos
+# headers missing from the generated NextOS sysroot. libc, libstdc++ and all
+# other target libraries come exclusively from the current NextOS sysroot.
+set(PARTYBOARD_MALI_STAGING_SYSROOT ${CMAKE_CURRENT_LIST_DIR}/../build/sysroot)
+set(CMAKE_FIND_ROOT_PATH
+  "${PARTYBOARD_MALI_STAGING_SYSROOT}"
+  "${CMAKE_SYSROOT}")
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
 # The Khronos GLES2/EGL headers are not in the aarch64 cross sysroot; ship them
@@ -28,8 +50,18 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 # (imgui/RmlUi/Aurora GLES2 backend include <GLES2/gl2.h>, <EGL/egl.h>). Use
 # CMAKE_<LANG>_FLAGS_INIT so the flag lands in every compile command regardless
 # of which subproject owns the target (FetchContent deps included).
-set(PARTYBOARD_NEXTOS_INCLUDE_FLAGS "-isystem ${PARTYBOARD_NEXTOS_SYSROOT}/include")
-set(CMAKE_C_FLAGS_INIT "${PARTYBOARD_NEXTOS_INCLUDE_FLAGS}")
-set(CMAKE_CXX_FLAGS_INIT "${PARTYBOARD_NEXTOS_INCLUDE_FLAGS}")
-set(CMAKE_C_STANDARD_INCLUDE_DIRS ${PARTYBOARD_NEXTOS_SYSROOT}/include)
-set(CMAKE_CXX_STANDARD_INCLUDE_DIRS ${PARTYBOARD_NEXTOS_SYSROOT}/include)
+set(PARTYBOARD_NEXTOS_INCLUDE_FLAGS
+  "-isystem ${PARTYBOARD_MALI_STAGING_SYSROOT}/include")
+# The target is a fixed Amlogic S905L (4x Cortex-A53 in-order). Scheduling for it
+# matters on this core; the generic aarch64 model leaves measurable decode-loop
+# performance on the table (FIFO drain: vertex expansion + hashing).
+set(PARTYBOARD_NEXTOS_CPU_FLAGS "-mcpu=cortex-a53")
+file(REAL_PATH "${CMAKE_CURRENT_LIST_DIR}/.." PARTYBOARD_SOURCE_ROOT)
+set(PARTYBOARD_REPRO_FLAGS
+  "-ffile-prefix-map=${PARTYBOARD_SOURCE_ROOT}=PartyBoard -fmacro-prefix-map=${PARTYBOARD_SOURCE_ROOT}=PartyBoard -fdebug-prefix-map=${PARTYBOARD_SOURCE_ROOT}=PartyBoard")
+set(CMAKE_C_FLAGS_INIT
+  "${PARTYBOARD_NEXTOS_INCLUDE_FLAGS} ${PARTYBOARD_NEXTOS_CPU_FLAGS} ${PARTYBOARD_REPRO_FLAGS}")
+set(CMAKE_CXX_FLAGS_INIT
+  "${PARTYBOARD_NEXTOS_INCLUDE_FLAGS} ${PARTYBOARD_NEXTOS_CPU_FLAGS} ${PARTYBOARD_REPRO_FLAGS}")
+set(CMAKE_C_STANDARD_INCLUDE_DIRS ${PARTYBOARD_MALI_STAGING_SYSROOT}/include)
+set(CMAKE_CXX_STANDARD_INCLUDE_DIRS ${PARTYBOARD_MALI_STAGING_SYSROOT}/include)

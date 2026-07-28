@@ -1,51 +1,327 @@
-<div align="center">
-  <img src="res/logo.png" alt="Logo" width="800">
+# Mario Party 4 / PartyBoard — NextOS Elite (AArch64, Mali-450 / GLES2)
 
-  <p align="center">
-    <a href="https://discord.gg/T4faGveujK">Discord</a>
-  </p>
-</div>
+**Language / Idioma:** [English](#english) · [Português](#português)
 
-# Overview
+---
 
-[Build Status]: https://github.com/mariopartyrd/partyboard/actions/workflows/build.yml/badge.svg
-[actions]: https://github.com/mariopartyrd/partyboard/actions/workflows/build.yml
-[Discord Badge]: https://img.shields.io/discord/994839212618690590?color=%237289DA&logo=discord&logoColor=%23FFFFFF
-[discord]: https://discord.gg/T4faGveujK
+## English
 
-A work-in-progress Windows/Linux/macOS/Android/iOS port of Mario Party 4.
+Native Mario Party 4 reimplementation adapted for NextOS Elite and the
+Amlogic Mali-450 (Utgard, OpenGL ES 2.0). This release is playable from the
+title screen through boards and minigames, with up to four controllers,
+music, sound effects, saves and a clean return to EmulationStation.
 
-This repository does **not** contain any game assets or assembly whatsoever. An existing copy of the game is required.
+PartyBoard is based on the Mario Party R&D decompilation project. It executes
+the reconstructed game code natively on AArch64; it is not a general-purpose
+GameCube emulator.
 
-Version Completion:
+### Release status
 
-- `GMPE01_00`: Rev 0 (USA)
-- `GMPE01_01`: Rev 1 (USA)
+- Full native game flow: title, save selection, character selection, boards,
+  dialogs, minigames and results.
+- Four-player input through SDL3/PortMaster mappings.
+- Music and sound effects through the reconstructed MusyX path and SDL3 ALSA.
+- Save and reload under the port-local runtime directory.
+- `Select + Start` exits cleanly and lets the frontend resume.
+- Mali-450 GLES2 rendering with shader/pipeline caches and device-specific
+  performance tuning.
+- Default internal render scale: **0.50**. The image is upscaled to the
+  1280×720 display by the Mali fbdev backend.
 
-### 1. Download [Party Board](https://github.com/mariopartyrd/partyboard/releases)
+### Architecture
 
-### 2. Setup the game
+1. `PartyBoard.sh` prepares an isolated HOME/config/cache tree, discovers the
+   supported disc image and launches the game in the foreground.
+2. The native `partyboard` executable initializes SDL3's Mali fbdev video
+   driver, ALSA audio, controller discovery and the normal PartyBoard boot flow.
+3. `libdol.so` contains the reconstructed main DOL. Each original GameCube REL
+   overlay is built as a native shared object and loaded in the same order the
+   game requests it.
+4. Aurora translates the original GX rendering model to OpenGL ES 2.0.
+5. The disc reader streams data from a supported GMPE01 image; saves, settings
+   and generated caches stay under `ports/partyboard/runtime/`.
 
-- Extract the .zip file
-- Launch partyboard or partyboard.exe depending on your platform.
+### Mali-450 performance work
 
-# Building
+- Cortex-A53-targeted AArch64 release build using the current NextOS Elite
+  toolchain and glibc 2.43 sysroot.
+- 0.50 internal resolution for stable gameplay on the fixed Mali-450 GPU.
+- Reduced shadow-map cost globally and stronger reductions only in heavy
+  minigames.
+- Targeted snow/blizzard particle reductions and disabled expensive
+  reflections in the heaviest scenes.
+- Memoized GX pipeline state and optimized vertex expansion/hashing in the
+  decode-bound draw path.
+- Pre-seeded pipeline and Mali program-binary caches. Program binaries validate
+  their GL fingerprint and are discarded automatically on incompatible
+  firmware or drivers.
+- Correct texture wrapping and alpha handling are preserved; optimizations are
+  scoped so bubbles, dialogs, board tiles and character colors remain correct.
 
-If you'd like to build Party Board from source, please read the [build instructions](building.md).
+### Controls
 
-## Common problems
+| GameCube action | NextOS / SDL action |
+|---|---|
+| A / B / X / Y | South / East / West / North face button |
+| Main stick | Left analog stick |
+| C-stick | Right analog stick |
+| L / R | Left / right analog trigger |
+| Z | Right shoulder |
+| D-pad | D-pad |
+| Start | Start |
+| Exit port | Hold `Select + Start` |
 
-### RenderDoc not working
+PortMaster's controller configuration is preferred. A mapping for the Twin USB
+PS2 adapter (`0810:0001`) is bundled as a fallback. Up to four SDL gamepads are
+enumerated independently.
 
-RenderDoc has some conflict with asan. To turn off asan, you should delete the two lines in `CMakeLists.txt` that enable ASAN for the DOL and the RELs: `set_source_files_properties(..., -fsanitize=address)`
+### Game data
 
-# Credits
+A legally obtained USA Mario Party 4 disc image is required:
 
-Special thanks to the GC/Wii decompilation community, the [Aurora](https://github.com/encounter/aurora) developers, the Dusk developers, all [contributors](https://github.com/mariopartyrd/partyboard/graphs/contributors), [ImWhoreHay](https://x.com/ImWhoreHay) for the font, and justcamtro for designing the assets.
+- Game ID: `GMPE01`
+- Supported revisions: Rev. 0 and Rev. 1
+- Supported formats: `.rvz`, `.iso` and `.gcm`
 
-<br/>
-<div align="center">
-    <a href="https://github.com/encounter/aurora">
-        <img src="assets/aurora-powered.png" alt="Powered by Aurora" width="800">
-    </a>
-</div>
+For a manual install, place one supported image in:
+
+```text
+/storage/roms/ports/partyboard/assets/
+```
+
+The launcher selects the first supported image and writes the runtime
+configuration automatically.
+
+### Package layout
+
+```text
+ports/
+└── partyboard/
+    ├── PartyBoard.sh
+    ├── partyboard
+    ├── libdol.so
+    ├── libSDL3.so.0
+    ├── libpng16.so.16
+    ├── libz.so.1
+    ├── *Dll.so
+    ├── assets/
+    ├── res/
+    ├── runtime/
+    └── licenses/
+ports_scripts/
+├── PartyBoard.sh
+└── images/PartyBoard.png
+```
+
+### Build
+
+The release build must use the toolchain generated by the current NextOS Elite
+tree. `configure-nextos.sh` locates that toolchain, or it can be selected with
+`NEXTOS_TOOLCHAIN_ROOT`.
+
+```bash
+PARTYBOARD_BUILD_DIR=build/nextos-release ./configure-nextos.sh
+cmake --build build/nextos-release -j8
+```
+
+The runtime SDL3 library must be built from the Mali-fbdev SDL3 tree with the
+same compiler/sysroot and with `SDL_MALI=ON`, `SDL_ALSA=ON`,
+`SDL_OPENGLES=ON`, `SDL_X11=OFF` and `SDL_WAYLAND=OFF`.
+
+The clean package builder accepts the native build directory, the Mali SDL3
+library, a staging directory, optional disc/menu art, and the official target
+strip tool:
+
+```bash
+packaging/nextos/build-package.sh \
+  --build-dir build/nextos-release \
+  --sdl3 /path/to/libSDL3.so.0.5.0 \
+  --stage-dir /path/to/clean-stage \
+  --rom /path/to/MarioParty4.rvz \
+  --menu-image /path/to/PartyBoard.png \
+  --strip-tool /path/to/aarch64-libreelec-linux-gnu-strip
+```
+
+### Source map
+
+- `src/game/` — reconstructed game systems, board flow, saves, audio and UI.
+- `src/REL/` — native builds of the original REL overlays and minigames.
+- `src/port/` — SDL/Aurora platform layer, input, settings, audio and tuning.
+- `src/msm/` — reconstructed MusyX sequencing, streams and sound effects.
+- `extern/aurora/` — GX-to-GLES2 renderer and disc/runtime support.
+- `packaging/nextos/PartyBoard.sh` — NextOS launcher and release defaults.
+- `packaging/nextos/build-package.sh` — allowlisted package assembly.
+- `HANDOFF.md` — detailed engineering and validation history.
+
+### Licenses and credits
+
+PartyBoard is developed by the Mario Party R&D contributors. The NextOS Elite
+adaptation adds the Mali-450 GLES2, ALSA, controller, launcher and performance
+work described above. Aurora, libco and MusyX retain their respective licenses
+in their source directories; the release package includes the applicable
+license notices.
+
+Nintendo, Mario Party and related names and assets are trademarks or
+copyrights of their respective owners. This community port is not affiliated
+with or endorsed by Nintendo or Hudson Soft.
+
+---
+
+## Português
+
+Reimplementação nativa de Mario Party 4 adaptada ao NextOS Elite e ao
+Amlogic Mali-450 (Utgard, OpenGL ES 2.0). Esta versão está jogável desde a tela
+inicial até tabuleiros e minigames, com até quatro controles, músicas, efeitos
+sonoros, saves e retorno limpo ao EmulationStation.
+
+O PartyBoard é baseado no projeto de decompilação Mario Party R&D. Ele executa
+o código reconstruído do jogo nativamente em AArch64; não é um emulador
+genérico de GameCube.
+
+### Estado da versão
+
+- Fluxo nativo completo: título, seleção de save, personagens, tabuleiros,
+  diálogos, minigames e resultados.
+- Entrada para quatro jogadores pelos mapeamentos SDL3/PortMaster.
+- Músicas e efeitos pela rota MusyX reconstruída e SDL3 ALSA.
+- Save e recarga dentro do runtime isolado do port.
+- `Select + Start` fecha corretamente e devolve o controle ao frontend.
+- Renderização GLES2 no Mali-450 com caches de shader/pipeline e otimizações
+  específicas para o aparelho.
+- Escala interna padrão: **0.50**. O backend Mali fbdev amplia a imagem para a
+  tela 1280×720.
+
+### Arquitetura
+
+1. `PartyBoard.sh` prepara HOME/config/cache isolados, localiza a imagem de
+   disco suportada e executa o jogo em primeiro plano.
+2. O executável nativo `partyboard` inicializa o driver Mali fbdev do SDL3,
+   áudio ALSA, controles e o fluxo normal de boot do PartyBoard.
+3. `libdol.so` contém o DOL principal reconstruído. Cada overlay REL original
+   vira uma biblioteca nativa e é carregado na mesma ordem pedida pelo jogo.
+4. O Aurora traduz o modelo de renderização GX original para OpenGL ES 2.0.
+5. O leitor de disco transmite os dados de uma imagem GMPE01 suportada; saves,
+   configurações e caches gerados ficam em `ports/partyboard/runtime/`.
+
+### Trabalho de performance no Mali-450
+
+- Build AArch64 otimizado para Cortex-A53 com o toolchain atual do NextOS Elite
+  e o sysroot glibc 2.43.
+- Resolução interna 0.50 para gameplay estável na GPU Mali-450 fixa.
+- Custo reduzido dos mapas de sombra e redução adicional só nos minigames mais
+  pesados.
+- Reduções direcionadas de partículas de neve/nevasca e reflexos caros
+  desligados nas cenas mais pesadas.
+- Estado de pipeline GX memoizado e expansão/hash de vértices otimizados no
+  caminho de draw limitado pela decodificação.
+- Caches iniciais de pipeline e binários de programa Mali. Os binários validam
+  a identidade GL e são descartados automaticamente se o firmware/driver não
+  for compatível.
+- Wrap de textura e alfa corretos são preservados; as otimizações são isoladas
+  para manter bolhas, diálogos, pisos do tabuleiro e cores dos personagens.
+
+### Controles
+
+| Ação do GameCube | Ação NextOS / SDL |
+|---|---|
+| A / B / X / Y | Botão sul / leste / oeste / norte |
+| Analógico principal | Analógico esquerdo |
+| C-stick | Analógico direito |
+| L / R | Gatilho analógico esquerdo / direito |
+| Z | Ombro direito |
+| Direcional | Direcional |
+| Start | Start |
+| Sair do port | Segure `Select + Start` |
+
+A configuração do PortMaster tem prioridade. Um mapeamento para o adaptador
+Twin USB PS2 (`0810:0001`) acompanha o port como fallback. Até quatro gamepads
+SDL são enumerados de forma independente.
+
+### Dados do jogo
+
+É necessária uma imagem obtida legalmente do Mario Party 4 americano:
+
+- Game ID: `GMPE01`
+- Revisões suportadas: Rev. 0 e Rev. 1
+- Formatos suportados: `.rvz`, `.iso` e `.gcm`
+
+Para instalação manual, coloque uma imagem suportada em:
+
+```text
+/storage/roms/ports/partyboard/assets/
+```
+
+O launcher escolhe a primeira imagem compatível e grava a configuração de
+runtime automaticamente.
+
+### Estrutura do pacote
+
+```text
+ports/
+└── partyboard/
+    ├── PartyBoard.sh
+    ├── partyboard
+    ├── libdol.so
+    ├── libSDL3.so.0
+    ├── libpng16.so.16
+    ├── libz.so.1
+    ├── *Dll.so
+    ├── assets/
+    ├── res/
+    ├── runtime/
+    └── licenses/
+ports_scripts/
+├── PartyBoard.sh
+└── images/PartyBoard.png
+```
+
+### Compilação
+
+O build de lançamento deve usar o toolchain gerado pela árvore atual do
+NextOS Elite. `configure-nextos.sh` localiza esse toolchain ou ele pode ser
+selecionado com `NEXTOS_TOOLCHAIN_ROOT`.
+
+```bash
+PARTYBOARD_BUILD_DIR=build/nextos-release ./configure-nextos.sh
+cmake --build build/nextos-release -j8
+```
+
+A biblioteca SDL3 de runtime deve ser compilada da árvore SDL3 Mali-fbdev com
+o mesmo compilador/sysroot e com `SDL_MALI=ON`, `SDL_ALSA=ON`,
+`SDL_OPENGLES=ON`, `SDL_X11=OFF` e `SDL_WAYLAND=OFF`.
+
+O montador limpo recebe o diretório do build nativo, a biblioteca SDL3 Mali,
+uma pasta de staging, disco/arte opcionais e o `strip` oficial do alvo:
+
+```bash
+packaging/nextos/build-package.sh \
+  --build-dir build/nextos-release \
+  --sdl3 /caminho/para/libSDL3.so.0.5.0 \
+  --stage-dir /caminho/para/staging-limpo \
+  --rom /caminho/para/MarioParty4.rvz \
+  --menu-image /caminho/para/PartyBoard.png \
+  --strip-tool /caminho/para/aarch64-libreelec-linux-gnu-strip
+```
+
+### Mapa do código
+
+- `src/game/` — sistemas reconstruídos, tabuleiro, saves, áudio e interface.
+- `src/REL/` — builds nativos dos overlays REL e minigames originais.
+- `src/port/` — camada SDL/Aurora, entrada, configurações, áudio e ajustes.
+- `src/msm/` — sequências MusyX, streams e efeitos sonoros reconstruídos.
+- `extern/aurora/` — renderer GX-para-GLES2 e suporte de disco/runtime.
+- `packaging/nextos/PartyBoard.sh` — launcher NextOS e padrões da versão.
+- `packaging/nextos/build-package.sh` — montagem do pacote por allowlist.
+- `HANDOFF.md` — histórico detalhado da engenharia e validação.
+
+### Licenças e créditos
+
+O PartyBoard é desenvolvido pelos contribuidores do Mario Party R&D. A
+adaptação NextOS Elite acrescenta o trabalho de Mali-450 GLES2, ALSA,
+controles, launcher e performance descrito acima. Aurora, libco e MusyX mantêm
+suas respectivas licenças nos diretórios de código; o pacote inclui os avisos
+de licença aplicáveis.
+
+Nintendo, Mario Party e nomes e recursos relacionados são marcas ou direitos
+autorais de seus respectivos proprietários. Este port comunitário não é
+afiliado nem endossado pela Nintendo ou pela Hudson Soft.

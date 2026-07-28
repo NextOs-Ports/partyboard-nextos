@@ -38,6 +38,7 @@ music, sound effects, saves, and a clean exit back to the frontend.
 
 ### Contents
 
+- [Screenshots](#screenshots)
 - [What this fork adds](#what-this-fork-adds)
 - [Repository layout](#repository-layout)
 - [Release status](#release-status)
@@ -50,6 +51,22 @@ music, sound effects, saves, and a clean exit back to the frontend.
 - [Source map](#source-map)
 - [Credits](#credits)
 - [Legal](#legal)
+
+### Screenshots
+
+Captured from the framebuffer on the target hardware — Mali-450 (Utgard),
+OpenGL ES 2.0, fbdev, at the panel's native 1280×720.
+
+| | |
+|:---:|:---:|
+| ![Title screen](docs/screenshots/01-title.png) | ![Party Mode with four players](docs/screenshots/02-party-mode.png) |
+| Boots and renders the title screen | Party Mode — 1P/2P/3P/4P, four controllers |
+| ![A board in play](docs/screenshots/03-board.png) | ![The dialog system](docs/screenshots/04-dialog.png) |
+| A full 3D board, four-player HUD | Dialogs and text, in English |
+
+![A minigame running](docs/screenshots/05-minigame.png)
+
+*A minigame running — transparency, timer HUD, full scene.*
 
 ### What this fork adds
 
@@ -365,6 +382,7 @@ controles, músicas, efeitos sonoros, saves e saída limpa para o frontend.
 
 ### Índice
 
+- [Capturas de tela](#capturas-de-tela)
 - [O que este fork acrescenta](#o-que-este-fork-acrescenta)
 - [Organização do repositório](#organização-do-repositório)
 - [Estado da versão](#estado-da-versão)
@@ -377,6 +395,22 @@ controles, músicas, efeitos sonoros, saves e saída limpa para o frontend.
 - [Mapa do código](#mapa-do-código)
 - [Créditos](#créditos)
 - [Aviso legal](#aviso-legal)
+
+### Capturas de tela
+
+Capturadas do framebuffer no hardware alvo — Mali-450 (Utgard), OpenGL ES 2.0,
+fbdev, na resolução nativa do painel, 1280×720.
+
+| | |
+|:---:|:---:|
+| ![Tela de título](docs/screenshots/01-title.png) | ![Party Mode com quatro jogadores](docs/screenshots/02-party-mode.png) |
+| Liga e renderiza a tela de título | Party Mode — 1P/2P/3P/4P, quatro controles |
+| ![Tabuleiro em jogo](docs/screenshots/03-board.png) | ![Sistema de diálogos](docs/screenshots/04-dialog.png) |
+| Tabuleiro 3D completo, HUD de quatro jogadores | Diálogos e texto, em inglês |
+
+![Minigame rodando](docs/screenshots/05-minigame.png)
+
+*Um minigame rodando — transparência, HUD de tempo, cena completa.*
 
 ### O que este fork acrescenta
 

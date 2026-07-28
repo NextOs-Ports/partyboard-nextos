@@ -249,6 +249,48 @@ The runtime SDL3 library must be built from the same tree with the same
 compiler and sysroot, configured with `SDL_MALI=ON`, `SDL_ALSA=ON`,
 `SDL_OPENGLES=ON`, `SDL_X11=OFF` and `SDL_WAYLAND=OFF`.
 
+#### Second build: PortMaster / SDL2 shim
+
+There is a second configuration under `packaging/portmaster/`, aimed at the
+handheld CFWs whose firmware ships its own SDL2. The renderer is unchanged —
+still our GLES 2.0 backend — but nothing opens the screen directly. SDL3 runs
+its `sdl2` video driver, which `dlopen`s `libSDL2-2.0.so.0`, lets the firmware
+create the window and EGL context, and republishes them as window properties.
+`lib/gl/device.cpp` picks those up and renders into the borrowed context. The
+gamepad does not go through that path: SDL3's own evdev driver keeps it.
+
+It needs a different SDL3 tree — one that has the `sdl2` video driver, patched
+with everything in `packaging/portmaster/patches/`. `SDL3-mali` will not work
+here; it has no such driver.
+
+```sh
+PARTYBOARD_SDL2SHIM_SRC=/path/to/SDL3-sdl2shim \
+  ./packaging/portmaster/build-in-docker.sh
+```
+
+Check the firmware's SDL2 before assuming this build applies to a device:
+
+```sh
+strings /usr/lib/libSDL2-2.0.so.0 | grep -i sdl2-compat
+```
+
+If that matches, the device has no real SDL2 — it has **sdl2-compat**, which
+translates SDL2 calls back into SDL3 and `dlopen`s `libSDL3.so.0`. The shim then
+closes a loop (our SDL3 → shim → sdl2-compat → our SDL3) and the process dies of
+stack exhaustion. There is no way around it: the premise of the shim is that
+something else owns the screen, and under sdl2-compat nothing does. Those
+devices want SDL3 with a native video driver instead, which is what the NextOS
+build already does.
+
+This build also must not pin `SDL_AUDIODRIVER` — audio is delegated to the
+firmware SDL2, which already knows the device's output.
+
+**Status: this configuration compiles and packages, and it has not yet run on a
+device with a real SDL2.** It was exercised on NextOS Elite, where it cannot
+work by construction: that firmware ships sdl2-compat, and the run ends in the
+recursion above. No release ships this variant, and the supported device list is
+therefore still NextOS Elite only, through the `mali` build.
+
 ### Packaging
 
 `build-package.sh` assembles a clean release from an allowlist — it takes the
@@ -593,6 +635,49 @@ cmake --build build/nextos-release -j8
 A biblioteca SDL3 de runtime deve ser compilada da mesma árvore, com o mesmo
 compilador e sysroot, configurada com `SDL_MALI=ON`, `SDL_ALSA=ON`,
 `SDL_OPENGLES=ON`, `SDL_X11=OFF` e `SDL_WAYLAND=OFF`.
+
+#### Segundo build: PortMaster / shim de SDL2
+
+Existe uma segunda configuração em `packaging/portmaster/`, voltada aos CFWs de
+portátil cuja firmware traz a própria SDL2. O renderer não muda — continua sendo
+nosso backend GLES 2.0 — mas nada abre a tela diretamente. A SDL3 roda o driver
+de vídeo `sdl2`, que dá `dlopen` na `libSDL2-2.0.so.0`, deixa a firmware criar a
+janela e o contexto EGL, e republica ambos como propriedades de janela. O
+`lib/gl/device.cpp` pega essas propriedades e desenha dentro do contexto
+emprestado. O gamepad não passa por aí: quem cuida dele é o driver evdev da
+própria SDL3.
+
+Isso exige outra árvore de SDL3 — uma que tenha o driver de vídeo `sdl2`,
+com todos os patches de `packaging/portmaster/patches/` aplicados. A `SDL3-mali`
+não serve aqui; ela não tem esse driver.
+
+```sh
+PARTYBOARD_SDL2SHIM_SRC=/caminho/para/SDL3-sdl2shim \
+  ./packaging/portmaster/build-in-docker.sh
+```
+
+Confira a SDL2 da firmware antes de supor que esse build serve para um aparelho:
+
+```sh
+strings /usr/lib/libSDL2-2.0.so.0 | grep -i sdl2-compat
+```
+
+Se casar, o aparelho não tem SDL2 de verdade — tem **sdl2-compat**, que traduz
+chamadas SDL2 de volta para SDL3 e dá `dlopen` em `libSDL3.so.0`. Aí o shim
+fecha um ciclo (nossa SDL3 → shim → sdl2-compat → nossa SDL3) e o processo morre
+de pilha estourada. Não há como contornar: a premissa do shim é que outra coisa
+seja dona da tela, e sob o sdl2-compat não é. Esses aparelhos querem SDL3 com
+driver de vídeo nativo, que é exatamente o que o build do NextOS já faz.
+
+Esse build também não pode cravar `SDL_AUDIODRIVER` — o áudio é delegado à SDL2
+da firmware, que já conhece a saída do aparelho.
+
+**Estado: essa configuração compila e empacota, e ainda não rodou num aparelho
+com SDL2 de verdade.** Foi exercitada no NextOS Elite, onde não tem como
+funcionar por construção: aquela firmware traz o sdl2-compat, e a execução
+termina na recursão acima. Nenhuma release distribui essa variante, e por isso a
+lista de aparelhos suportados continua sendo só o NextOS Elite, pelo build
+`mali`.
 
 ### Empacotamento
 

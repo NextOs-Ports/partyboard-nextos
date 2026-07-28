@@ -56,24 +56,40 @@ music, sound effects, saves, and a clean exit back to the frontend.
 Two pieces of engineering carried this port from "boots to a title screen" to a
 complete, playable release.
 
-#### 1. An OpenGL ES 2.0 renderer for Mali-450
+#### 1. Getting Aurora's GLES renderer onto Mali-450
 
 Aurora — the GameCube compatibility layer PartyBoard renders through —
-originally targets Dawn/WebGPU, which an Utgard-class Mali-450 cannot run. A
-full GLES 2.0 backend was written to replace it:
+originally targets Dawn/WebGPU, which no Mali of this class can run.
 
-- a GLSL emitter that lowers the GX (TEV) pipeline to ES 2.0 shaders;
-- EFB copy/resolve machinery, palette and texture-format conversion;
-- persistently mapped write-combine ring buffers for per-frame vertex data;
-- RmlUi and imgui compositing on the GLES path;
-- a persistent Mali program-binary disk cache that validates its GL fingerprint
-  and self-invalidates on an incompatible driver or firmware.
+**The GLES / GLES3 backend that replaced it is not our work.** It was written by
+**[Brian Degenhardt (`bmdhacks`)](https://github.com/bmdhacks/aurora)** for the
+**[Dusklight](https://github.com/TwilitRealm/dusklight)** port — the
+reverse-engineered reimplementation of *The Legend of Zelda: Twilight Princess*.
+That is where the renderer was cut over from Dawn/WebGPU and where the hard
+parts were designed and proven: the GLSL emitter that lowers the GX (TEV)
+pipeline to GLES shaders, EFB copy/resolve machinery, persistently mapped
+write-combine ring buffers, RmlUi and imgui compositing on the GLES path, the
+persistent program-binary disk cache, and the GPU-object leak fixes. Roughly 34
+commits of renderer work, on top of Aurora itself by Luke Street. **Mario Party 4
+renders at all because that groundwork already existed.**
 
-That backend was first built and proven during our earlier GameCube porting work
-on the Twilight Princess HD lineage, and is reused here. The Mario Party 4
-specific work extended it with dynamic-palette width fixes, two GPU-object leak
-fixes, and a GX FIFO drain optimization that lifted the frame rate off a ~22 fps
-ceiling.
+That backend targets a Mali **G31** — a Bifrost part with OpenGL ES 3.x. The
+Mali-450 is Utgard: fixed-function, **ES 2.0 only**, no ES 3.x path available at
+any price.
+
+**The OpenGL ES 2.0 backend is ours.** Taking the ES 3.x renderer down to ES 2.0
+was 39 files and ~1,700 lines: an ES2 EGL configuration
+(`EGL_OPENGL_ES2_BIT` in place of `EGL_OPENGL_ES3_BIT`), a GLSL ES 1.00
+(`#version 100`) shader emission path — 342 lines in the GX shader layer alone —
+and the ES2-level rework of the GL loader, device and buffer layers, texture-copy
+and palette conversion, clears, pad handling, timing and the fbdev present path.
+
+Also ours, on top of that:
+
+- **A dynamic-palette width fix** — palettes were sampled at the wrong width.
+- **The GX FIFO drain optimization** that lifted Mario Party 4 off a ~22 fps
+  ceiling, together with memoized shader/pipeline state and optimized vertex
+  expansion and hashing in the decode-bound draw path.
 
 #### 2. Real audio, without emulating a DSP
 
@@ -276,6 +292,16 @@ This port stands on other people's work. Credit where it is due:
 - **Luke Street (`encounter`) and the Aurora contributors** — Aurora, the
   source-level GameCube/Wii compatibility layer that models the GX pipeline.
   MIT licensed. Upstream: [encounter/aurora](https://github.com/encounter/aurora).
+- **[Brian Degenhardt (`bmdhacks`)](https://github.com/bmdhacks/aurora)** — the
+  GLES/GLES3 backend for Aurora, which cut the renderer over from Dawn/WebGPU and
+  built the GX-to-GLES translation this port stands on. Our ES 2.0 work is an
+  extension of his, not a replacement for it.
+- **The [Dusklight](https://github.com/TwilitRealm/dusklight) team, and the
+  [Twilight Princess decompilation](https://github.com/zeldaret/tp) team behind
+  it** — that GLES renderer was built and proven on Dusklight, their
+  reimplementation of *The Legend of Zelda: Twilight Princess*. Mario Party 4
+  renders on this hardware because that groundwork already existed. Dusklight is
+  released under CC0 1.0.
 - **Axiomatic Data Laboratories (AxioDL)** — the MusyX reconstruction our
   software synthesizer plugs into. MIT licensed.
   Upstream: [AxioDL/musyx](https://github.com/AxioDL/musyx). MusyX itself is
@@ -357,24 +383,42 @@ controles, músicas, efeitos sonoros, saves e saída limpa para o frontend.
 Dois blocos de engenharia levaram este port de "liga na tela de título" até uma
 versão completa e jogável.
 
-#### 1. Um renderizador OpenGL ES 2.0 para o Mali-450
+#### 1. Levar o renderizador GLES do Aurora para o Mali-450
 
 O Aurora — camada de compatibilidade GameCube pela qual o PartyBoard renderiza —
-tem como alvo o Dawn/WebGPU, que um Mali-450 (classe Utgard) não roda. Um backend
-GLES 2.0 completo foi escrito para substituí-lo:
+tem como alvo o Dawn/WebGPU, que nenhum Mali dessa classe roda.
 
-- um emissor GLSL que rebaixa o pipeline GX (TEV) para shaders ES 2.0;
-- máquina de cópia/resolve do EFB e conversão de paletas e formatos de textura;
-- ring buffers write-combine mapeados de forma persistente para os vértices do frame;
-- composição de RmlUi e imgui no caminho GLES;
-- cache em disco de binários de programa Mali, que valida a identidade GL e se
-  invalida sozinho em driver ou firmware incompatível.
+**O backend GLES / GLES3 que o substituiu não é trabalho nosso.** Ele foi escrito
+por **[Brian Degenhardt (`bmdhacks`)](https://github.com/bmdhacks/aurora)** para o
+port **[Dusklight](https://github.com/TwilitRealm/dusklight)** — a reimplementação
+por engenharia reversa de *The Legend of Zelda: Twilight Princess*. Foi lá que o
+renderizador foi virado de Dawn/WebGPU para GLES e que as partes difíceis foram
+projetadas e provadas: o emissor GLSL que rebaixa o pipeline GX (TEV) para
+shaders GLES, a máquina de cópia/resolve do EFB, os ring buffers write-combine
+mapeados de forma persistente, a composição de RmlUi e imgui no caminho GLES, o
+cache em disco de binários de programa e as correções de vazamento de objetos de
+GPU. Cerca de 34 commits de trabalho de renderizador, sobre o próprio Aurora de
+Luke Street. **O Mario Party 4 renderiza porque esse alicerce já existia.**
 
-Esse backend foi construído e provado no nosso trabalho anterior de ports de
-GameCube, na linhagem do Twilight Princess HD, e é reaproveitado aqui. O trabalho
-específico do Mario Party 4 o estendeu com correção de largura de paletas
-dinâmicas, dois vazamentos de objetos de GPU e uma otimização no drain do FIFO do
-GX que tirou o frame rate de um teto de ~22 fps.
+Aquele backend tem como alvo uma Mali **G31** — peça Bifrost, com OpenGL ES 3.x.
+A Mali-450 é Utgard: função fixa, **só ES 2.0**, sem caminho ES 3.x a qualquer
+preço.
+
+**O backend OpenGL ES 2.0 é nosso.** Descer o renderizador de ES 3.x para ES 2.0
+foram 39 arquivos e ~1.700 linhas: configuração EGL ES2
+(`EGL_OPENGL_ES2_BIT` no lugar de `EGL_OPENGL_ES3_BIT`), um caminho de emissão de
+shaders em GLSL ES 1.00 (`#version 100`) — 342 linhas só na camada de shader do
+GX — e o retrabalho em nível de ES2 do loader GL, das camadas de device e
+buffers, da cópia de textura e conversão de paletas, dos clears, do tratamento de
+pad, do timing e do caminho de present no fbdev.
+
+Também nosso, por cima disso:
+
+- **Correção de largura de paletas dinâmicas** — estavam sendo amostradas na
+  largura errada.
+- **A otimização do drain do FIFO do GX**, que tirou o Mario Party 4 de um teto
+  de ~22 fps, junto com memoização de estado de shader/pipeline e expansão e
+  hash de vértices otimizados no caminho de draw limitado por decodificação.
 
 #### 2. Áudio de verdade, sem emular DSP
 
@@ -575,6 +619,16 @@ Este port se apoia no trabalho de outras pessoas. Crédito a quem é de direito:
   de compatibilidade GameCube/Wii em nível de código-fonte que modela o pipeline
   GX. Licença MIT.
   Upstream: [encounter/aurora](https://github.com/encounter/aurora).
+- **[Brian Degenhardt (`bmdhacks`)](https://github.com/bmdhacks/aurora)** — o
+  backend GLES/GLES3 do Aurora, que virou o renderizador de Dawn/WebGPU e
+  construiu a tradução GX-para-GLES sobre a qual este port se apoia. O nosso
+  trabalho de ES 2.0 é uma extensão do dele, não um substituto.
+- **A equipe do [Dusklight](https://github.com/TwilitRealm/dusklight), e a equipe
+  da [decompilação de Twilight Princess](https://github.com/zeldaret/tp) por trás
+  dele** — esse renderizador GLES foi construído e provado no Dusklight, a
+  reimplementação deles de *The Legend of Zelda: Twilight Princess*. O Mario
+  Party 4 renderiza neste hardware porque esse alicerce já existia. O Dusklight é
+  publicado sob CC0 1.0.
 - **Axiomatic Data Laboratories (AxioDL)** — a reconstrução do MusyX na qual o
   nosso sintetizador de software se encaixa. Licença MIT.
   Upstream: [AxioDL/musyx](https://github.com/AxioDL/musyx). O MusyX em si é

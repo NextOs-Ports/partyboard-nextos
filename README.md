@@ -4,6 +4,12 @@
 
 ---
 
+## Community
+
+Questions, bug reports, help getting the port running, and news about the next ones:
+
+💬 **Discord:** [discord.gg/DHfY62eDNN](https://discord.gg/DHfY62eDNN)
+
 ## English
 
 A native AArch64 port of **Mario Party 4** for **NextOS Elite** on Amlogic

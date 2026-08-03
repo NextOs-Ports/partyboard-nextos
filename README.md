@@ -10,6 +10,14 @@ Questions, bug reports, help getting the port running, and news about the next o
 
 💬 **Discord:** [discord.gg/DHfY62eDNN](https://discord.gg/DHfY62eDNN)
 
+## Support this work
+
+These ports take real time and real money to build. If you enjoy them:
+
+- 💗 **GitHub Sponsors**: [github.com/sponsors/NextOs-Ports](https://github.com/sponsors/NextOs-Ports)
+- ☕ **Ko-fi** (PayPal/card): [ko-fi.com/nextos](https://ko-fi.com/nextos)
+- 🇧🇷 **PIX**: [livepix.gg/nextos](https://livepix.gg/nextos)
+
 ## English
 
 A native AArch64 port of **Mario Party 4** for **NextOS Elite** on Amlogic
@@ -408,6 +416,22 @@ by Nintendo or Hudson Soft, and it distributes no game data.
 ---
 
 ## Português
+
+### Comunidade
+
+Dúvidas, relatos de bug, ajuda pra colocar o port pra rodar e novidades dos próximos:
+
+💬 **Discord:** [discord.gg/DHfY62eDNN](https://discord.gg/DHfY62eDNN)
+
+### Apoie este trabalho
+
+Fazer esses ports custa tempo e dinheiro de verdade. Se curte o resultado:
+
+- 💗 **GitHub Sponsors**: [github.com/sponsors/NextOs-Ports](https://github.com/sponsors/NextOs-Ports)
+- ☕ **Ko-fi** (PayPal/cartão): [ko-fi.com/nextos](https://ko-fi.com/nextos)
+- 🇧🇷 **PIX**: [livepix.gg/nextos](https://livepix.gg/nextos)
+
+---
 
 Port nativo AArch64 de **Mario Party 4** para o **NextOS Elite** em hardware
 Amlogic com **GPU Mali-450 (Utgard) e OpenGL ES 2.0**.
